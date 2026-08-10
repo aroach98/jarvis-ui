@@ -28,25 +28,28 @@ publishes, and forward voice/mic events back to it. Splitting them means the age
 can run (and be restarted, logged, tested) independently of whether any window is open —
 same pattern as the existing AGENTS fleet worker (see `fleet-worker-autostart` memory).
 
-## 2. Display layout
+## 2. Display layout — per-workstream, not per-domain
+
+The physical desk is a plus/cross arrangement, not a row: one monitor above, one below-
+center (arm-mounted lower, directly ahead), and one flanking each side. Panels are
+assigned by **workstream**, not by data type — each side monitor is "everything about
+that world," so glancing left or right answers "how's CACC/Momentum doing" in one look
+instead of needing to check a fleet panel *and* a comms panel *and* a spend panel.
 
 Electron's `screen.getAllDisplays()` enumerates the 4 monitors at startup. Each gets one
 frameless, always-on-top, fullscreen `BrowserWindow` positioned at that display's bounds.
 Which panel renders on which physical display is configurable in `jarvis.config.json`
-(display index → panel id) rather than hardcoded, since monitor arrangement varies and
-Windows doesn't guarantee stable display ordering across reboots — jarvis-core resolves
-the mapping by matching each display's reported position/resolution against the saved
-config, and falls back to left-to-right order with a warning if a display goes missing.
+(display index → panel id) rather than hardcoded, since Windows doesn't guarantee stable
+display ordering across reboots — jarvis-core resolves the mapping by matching each
+display's reported position against the saved config, and falls back to a sane default
+with a warning if a display goes missing.
 
-Default panel assignment (a straight 4-monitor row has no true "center," so Jarvis Core
-lives on whichever display is marked primary in Windows display settings):
-
-| Panel | Subagent(s) | Content |
-|---|---|---|
-| **Jarvis Core** | voice/orchestrator | Arc-reactor voice visualizer, current intent being routed, global status ticker, cost-mode indicator |
-| **Fleet & Spend** | `agents-fleet`, `token-usage` | Live AGENTS fleet runs, per-world Claude token spend/cost meters |
-| **CACC** | `cacc-comms` | andrew.roach@cacadets.org inbox triage, flagged/urgent threads |
-| **Momentum** | `momentum-clients`, `personal-tasks` | Client pipeline from clients.momentumsystems.dev, taskers due today from tracking.andrewroach.xyz |
+| Position | Panel | Subagent(s) | Content |
+|---|---|---|---|
+| **Left** | CACC | `cacc-comms`, `cacc-fleet`, `cacc-checks` | Inbox triage, CACC-scoped agent runs, test/deploy verdicts (Proving Ground gate, Vercel deploys), CACC's slice of today's token spend |
+| **Right** | Momentum | `momentum-comms`, `momentum-fleet`, `momentum-crm` | Inbox triage, Momentum-scoped agent runs, CRM pipeline (clients.momentumsystems.dev), Momentum's slice of today's token spend. Later: autonomous demo-outreach status to nearby businesses (v2, not designed yet) |
+| **Bottom-middle** (primary) | Jarvis Core | voice/orchestrator | Arc-reactor voice visualizer, current intent being routed, cost-mode toggle, global status ticker |
+| **Top** | Personal / Today — **provisional, not finalized** | `personal-tasks` | Today's to-do list + taskers due (tracking.andrewroach.xyz), overall spend across all worlds. Open question: might instead become a broader "personal snapshot" (add calendar, fitness ring, etc.) — revisit before Phase 1 locks it in |
 
 Every panel keeps refreshing on its own polling interval (default 60s) whether or not
 Jarvis is actively being talked to — voice interaction triggers on-demand refreshes and
@@ -71,12 +74,19 @@ voice utterance → Jarvis (intent routing)
                      └─ dispatch → subagent (fetch/act) → result → TTS
 ```
 
-Subagents:
-- `agents-fleet` — reads the `agents` schema (ex-opsdeck), summarizes running/queued/failed tasks
-- `token-usage` — aggregates Claude API spend across CACC/Momentum/personal contexts
+Subagents, grouped by the panel they feed:
 - `cacc-comms` — Microsoft Graph read/draft/send on andrew.roach@cacadets.org (see `graph-mailbox-access` memory: draft by default, never auto-send without confirmation)
-- `momentum-clients` — reads clients.momentumsystems.dev (`mscrm` schema)
+- `cacc-fleet` — reads the `agents` schema (ex-opsdeck) filtered to California-Cadet-Corps-org repos
+- `cacc-checks` — test/deploy verdicts: Proving Ground gate (`testing` subdomain), Vercel deploy status across cacc-* sites
+- `momentum-comms` — Momentum inbox triage; mailbox/address not yet identified, open item
+- `momentum-fleet` — reads the `agents` schema filtered to Momentum-Systems-Dev-org repos
+- `momentum-crm` — reads clients.momentumsystems.dev (`mscrm` schema) for pipeline stage
 - `personal-tasks` — reads tracking.andrewroach.xyz ("Andrew OS")
+- `token-usage` — cross-cutting: aggregates Claude API spend per world, but its output is *split* across panels (each world's slice renders on that world's own monitor via `cacc-fleet`/`momentum-fleet`, with the cross-world total on the Top panel) rather than getting a dedicated panel of its own
+
+`cacc-fleet` and `momentum-fleet` both read the same underlying `agents` schema, just
+filtered differently — that filter (by source repo's GitHub org) doesn't exist yet and is
+called out again in §8.
 
 v1 subagents only *report*; v2 stretch goal is letting a subagent also emit UI directives
 (highlight urgent items, reorder its panel) rather than a fixed template — the
@@ -109,10 +119,13 @@ classification:
    session via the Spotify Web API (start/resume playback on your active device at a
    low volume, e.g. 15%) so no audio file needs to live in this repo. Local-file
    fallback if Spotify isn't reachable.
-2. Jarvis then delivers a flash briefing: one line per subagent, **15 words or less
-   each**, in a fixed order — fleet/spend, CACC, Momentum, personal taskers. Each
-   subagent must return a briefing-mode summary (not its full report) for this to work;
-   that's a distinct "brief" call each subagent implements alongside its normal fetch.
+2. Jarvis then delivers a flash briefing: one line per panel, **15 words or less
+   each**, in a fixed order — CACC (comms + fleet + checks combined into one line),
+   Momentum (comms + fleet + CRM combined), Personal/Today. Each subagent must return a
+   briefing-mode summary (not its full report) for this to work; that's a distinct
+   "brief" call each subagent implements alongside its normal fetch, and the panel-owning
+   subagent (`cacc-comms`, `momentum-comms`) is responsible for merging its sibling
+   subagents' briefs into one line rather than Jarvis doing the merging itself.
 3. Music keeps playing quietly under/after the briefing until you say "Jarvis, that's
    enough" or a timeout.
 
@@ -154,7 +167,18 @@ data.
   focused window.
 - Token-usage subagent needs an actual spend-tracking source — Claude API usage isn't
   currently metered anywhere per-world; this needs a small ledger, not scraping.
+- `agents` schema (ex-opsdeck) has no per-repo/per-org filter today — `cacc-fleet` and
+  `momentum-fleet` both need one to split fleet runs by workstream instead of showing
+  everything on both panels.
+- Momentum inbox/mailbox for `momentum-comms` isn't identified yet (CACC has a known
+  Graph mailbox; Momentum's equivalent needs to be picked).
+- Momentum panel's future "autonomous demo-outreach to nearby businesses" section is a
+  stated direction, not a designed feature — needs its own design pass once the
+  outreach system itself exists.
+- Top panel's content is explicitly undecided — leaning personal to-do/taskers, but
+  confirm before Phase 1 locks the layout in.
 - Wake-word model needs training/tuning for the custom "Good morning Jarvis" phrase.
 - Voice choice for Pro-mode TTS is unpicked — needs a short shortlist + listen-through.
 - Multi-display config resolution (matching saved panel assignments to physical
-  displays across reboots) needs real-world testing on this machine's 4-monitor setup.
+  displays across reboots) needs real-world testing on this machine's plus-shaped
+  4-monitor arrangement specifically (not a simple row).

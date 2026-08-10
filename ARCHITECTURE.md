@@ -49,11 +49,22 @@ with a warning if a display goes missing.
 | **Left** | CACC | `cacc-comms`, `cacc-fleet`, `cacc-checks` | Inbox triage, CACC-scoped agent runs, test/deploy verdicts (Proving Ground gate, Vercel deploys), CACC's slice of today's token spend |
 | **Right** | Momentum | `momentum-comms`, `momentum-fleet`, `momentum-crm` | Inbox triage, Momentum-scoped agent runs, CRM pipeline (clients.momentumsystems.dev), Momentum's slice of today's token spend. Later: autonomous demo-outreach status to nearby businesses (v2, not designed yet) |
 | **Bottom-middle** (primary) | Jarvis Core | voice/orchestrator | Arc-reactor voice visualizer, current intent being routed, cost-mode toggle, global status ticker |
-| **Top** | Personal / Today — **provisional, not finalized** | `personal-tasks` | Today's to-do list + taskers due (tracking.andrewroach.xyz), overall spend across all worlds. Open question: might instead become a broader "personal snapshot" (add calendar, fitness ring, etc.) — revisit before Phase 1 locks it in |
+| **Top** | Subscriptions & Today — **partially decided** | `subscriptions-usage`, `personal-tasks` | Usage bars for every Claude subscription across all payers (usage.andrewroach.xyz), today's to-do list + taskers due (tracking.andrewroach.xyz), overall API spend across all worlds. Subscriptions section is locked in; the rest of the panel (to-do list vs. a broader personal snapshot) is still open — revisit before Phase 1 locks it in |
 
 Every panel keeps refreshing on its own polling interval (default 60s) whether or not
 Jarvis is actively being talked to — voice interaction triggers on-demand refreshes and
 actions on top of that baseline, it doesn't gate the baseline.
+
+**Subscriptions are the one deliberate exception to "panels = workstream."** A Claude
+subscription seat might be paid for by Momentum Systems, but it's still fundamentally
+*your* usage across whatever you're doing with it — it doesn't belong to a single
+workstream the way an inbox or a CRM does. It lives on the Top panel as an open-ended,
+growing list (more seats will be added over time), each entry showing: subscription
+name, who pays for it (personal vs. Momentum Systems — shown as a plain label, not
+color-coded, so it doesn't collide with the cyan/amber = CACC/Momentum accent meaning
+used everywhere else), percent of its usage window consumed, and when that window
+resets. Fill color on each bar is semantic (green/amber/red by how close to the limit),
+independent of who's paying.
 
 ## 3. Jarvis: master agent + subagents
 
@@ -82,6 +93,10 @@ Subagents, grouped by the panel they feed:
 - `momentum-fleet` — reads the `agents` schema filtered to Momentum-Systems-Dev-org repos
 - `momentum-crm` — reads clients.momentumsystems.dev (`mscrm` schema) for pipeline stage
 - `personal-tasks` — reads tracking.andrewroach.xyz ("Andrew OS")
+- `subscriptions-usage` — reads usage.andrewroach.xyz for Claude subscription usage
+  (percent of window consumed, reset time) across every seat regardless of who pays for
+  it; the list is expected to grow as more Momentum-funded seats are added, so the data
+  shape is an open array of subscriptions, not a fixed set
 - `token-usage` — cross-cutting: aggregates Claude API spend per world, but its output is *split* across panels (each world's slice renders on that world's own monitor via `cacc-fleet`/`momentum-fleet`, with the cross-world total on the Top panel) rather than getting a dedicated panel of its own
 
 `cacc-fleet` and `momentum-fleet` both read the same underlying `agents` schema, just
@@ -175,8 +190,12 @@ data.
 - Momentum panel's future "autonomous demo-outreach to nearby businesses" section is a
   stated direction, not a designed feature — needs its own design pass once the
   outreach system itself exists.
-- Top panel's content is explicitly undecided — leaning personal to-do/taskers, but
-  confirm before Phase 1 locks the layout in.
+- Top panel's non-subscription content is still open — leaning personal to-do/taskers,
+  but confirm before Phase 1 locks the layout in.
+- `subscriptions-usage` connector to usage.andrewroach.xyz isn't designed yet — that
+  site is Google-auth-gated and its API/data model isn't documented anywhere jarvis-ui
+  can currently see. Needs a look at that codebase (or a service-account/API-key path
+  into it) before this subagent can be built for real.
 - Wake-word model needs training/tuning for the custom "Good morning Jarvis" phrase.
 - Voice choice for Pro-mode TTS is unpicked — needs a short shortlist + listen-through.
 - Multi-display config resolution (matching saved panel assignments to physical

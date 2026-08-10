@@ -21,8 +21,15 @@ Live: https://claude.ai/code/artifact/294af993-7c48-4cf1-a1b3-834beffe0481
   exists. Amber accent, diamond-shaped badge (placeholder, not the real logo).
 - **Bottom-middle (Jarvis Core)**: arc-reactor voice visualizer, listening/routing
   status, free/pro mode toggle, last-routed-command line, briefing spec note.
-- **Top (Today)**: explicitly marked provisional (dashed border) — currently shows
-  taskers due + total cross-world spend, but content isn't finalized.
+- **Top (Subscriptions & Today)**: split into a locked-in section and a still-open one.
+  Subscriptions is a horizontal usage-bar list — extensible, since more Claude seats
+  (some Momentum-funded) will be added over time. Each bar shows the subscription name,
+  who pays for it (plain text label, not accent-colored, so it doesn't collide with the
+  cyan=CACC/amber=Momentum meaning used elsewhere), percent of its usage window used
+  (semantic fill color: green/amber/red by proximity to limit), and reset time. Below
+  that, taskers due + total cross-world API spend — still marked provisional (dashed
+  panel border), since whether this stays a to-do list or becomes a broader personal
+  snapshot isn't decided.
 
 Visual language: near-black ground with a faint grid texture, cyan HUD accent (primary,
 CACC), amber/gold accent (secondary, Momentum + pro-mode), corner-bracket panel framing,

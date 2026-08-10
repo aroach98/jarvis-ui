@@ -2,19 +2,26 @@
 
 Phased so each stage is independently useful and testable before the next starts.
 
-## Phase 0 — Design (current)
+## Phase 0 — Design (done)
 - [x] Repo + architecture doc
-- [ ] Visual mockup agreed on
-- [ ] Panel → display mapping decided against the real 4-monitor arrangement
+- [x] Visual mockup agreed on (plus-shaped, per-workstream, subscriptions on Top)
+- [x] Panel → display mapping decided: geometry heuristic + `jarvis.config.json` overrides
+- [x] Workspace scaffolded (pnpm, TS, shared contracts) — see `CLAUDE.md`
 
-## Phase 1 — Shell, no voice
-- Electron shell opens 4 fullscreen windows, one per display, static mock data
-- Panel UI components built against the agreed mockup
-
-## Phase 2 — Real data, still no voice
-- `agents-fleet`, `token-usage`, `cacc-comms`, `momentum-clients`, `personal-tasks`
-  subagents wired to their real sources, polling on an interval
-- Vault/secrets connectors, fail-closed-per-panel behavior
+## Phase 1 + Phase 2 — current kickoff target
+Real Electron shell on real displays, wired to real data where a source exists. See
+`CLAUDE.md` for the full brief, including which 4 subagents are known-blocked and how
+they should degrade (`connected: false` + reason, never fabricated data) rather than
+stall the rest of the build:
+- `jarvis-shell` main process: real multi-display window creation, one fullscreen
+  `BrowserWindow` per display
+- Panel UI components built against the approved mockup, reading live `packages/shared`
+  state over WS
+- `jarvis-core`: real WS server, subagent registry, poll loop
+- Real subagents: `cacc-comms`, `cacc-checks`, `momentum-crm`, `personal-tasks` (all have
+  reachable data sources today)
+- Known-blocked, build the interface but don't fake the data: `cacc-fleet`,
+  `momentum-fleet`, `momentum-comms`, `subscriptions-usage`
 
 ## Phase 3 — Voice, free mode only
 - Wake word ("Jarvis") via openWakeWord

@@ -28,6 +28,14 @@ publishes, and forward voice/mic events back to it. Splitting them means the age
 can run (and be restarted, logged, tested) independently of whether any window is open —
 same pattern as the existing AGENTS fleet worker (see `fleet-worker-autostart` memory).
 
+**Stack**: pnpm workspaces (`apps/jarvis-core`, `apps/jarvis-shell`, `packages/shared`).
+`jarvis-core` is plain Node/TypeScript talking WebSocket (the `ws` package). `jarvis-shell`
+is Electron + React, bundled with `electron-vite`. `packages/shared` holds every type both
+apps depend on — panel state shapes, the WS message envelope, `JarvisConfig` — so the two
+apps can't silently drift out of sync on what a message looks like. Full contract lives in
+`packages/shared/src/index.ts`; treat it as the source of truth over this document if the
+two ever disagree.
+
 ## 2. Display layout — per-workstream, not per-domain
 
 The physical desk is a plus/cross arrangement, not a row: one monitor above, one below-
@@ -36,13 +44,19 @@ assigned by **workstream**, not by data type — each side monitor is "everythin
 that world," so glancing left or right answers "how's CACC/Momentum doing" in one look
 instead of needing to check a fleet panel *and* a comms panel *and* a spend panel.
 
-Electron's `screen.getAllDisplays()` enumerates the 4 monitors at startup. Each gets one
-frameless, always-on-top, fullscreen `BrowserWindow` positioned at that display's bounds.
-Which panel renders on which physical display is configurable in `jarvis.config.json`
-(display index → panel id) rather than hardcoded, since Windows doesn't guarantee stable
-display ordering across reboots — jarvis-core resolves the mapping by matching each
-display's reported position against the saved config, and falls back to a sane default
-with a warning if a display goes missing.
+`jarvis-shell`'s Electron **main process** enumerates the 4 monitors at startup via
+`screen.getAllDisplays()` — this resolution is a `jarvis-shell` concern, not
+`jarvis-core`'s, since only the Electron process has display access. Each display gets
+one frameless, always-on-top, fullscreen `BrowserWindow` positioned at that display's
+bounds, loading the renderer with `?panel=<id>` so it knows which panel to render.
+
+Default resolution is a **geometry heuristic**, since Windows doesn't guarantee stable
+display ordering across reboots and hardcoding indices would break the first time a
+cable gets reseated: the topmost display (smallest y) → `top`; of the remaining three,
+leftmost (smallest x) → `left`, rightmost (largest x) → `right`, the one left over →
+`core`. `jarvis.config.json`'s `displayOverrides` (keyed by Electron's `display.id`) can
+pin a specific display to a specific panel when the heuristic gets it wrong — see
+`packages/shared`'s `JarvisConfig` type for the exact shape.
 
 | Position | Panel | Subagent(s) | Content |
 |---|---|---|---|

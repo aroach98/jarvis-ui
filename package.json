@@ -1,0 +1,16 @@
+{
+  "name": "jarvis-ui",
+  "private": true,
+  "version": "0.0.0",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev:core": "pnpm --filter @jarvis-ui/core dev",
+    "dev:shell": "pnpm --filter @jarvis-ui/shell dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm -r lint"
+  }
+}

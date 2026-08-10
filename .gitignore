@@ -1,0 +1,14 @@
+node_modules/
+dist/
+dist-electron/
+release/
+out/
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.local.json

@@ -16,26 +16,48 @@ This file is for whichever agent picks up the actual build. Read it before writi
    not a rough sketch to reinterpret freely.
 4. `ROADMAP.md` — phase breakdown.
 
-## What to build this pass
+## Current state (Phase 1 + 2 shipped 2026-08-14)
 
-**Phase 1 + Phase 2 together**: a working Electron shell rendering the real 4-panel
-layout on this machine's actual displays, wired to real data sources where those exist.
+The Electron shell renders the real 4-panel layout fullscreen on this machine's
+actual displays, and `jarvis-core` polls real data (60s) over WS. What's real:
 
-Four subagents are **known-blocked** going in — don't let any of them stall the rest of
-the build:
+- `cacc-comms` — Graph inbox via the shared `~/.cacc-graph/token.json` cache
+  (`src/lib/graph.ts` ports mail.ps1's refresh flow, single-flight, rotation-safe).
+- `cacc-checks` — Proving Ground `testing` schema over the CACC Supavisor pooler
+  (vault: "CACC Core / Supabase" / `SUPABASE_SUPAVISOR_TRANSACTION_URL`) + gate
+  decisions + Vercel prod deploy state for red/amber sites ("CACC Core / Vercel" /
+  `VERCEL_TOKEN`). Waiver semantics: verdict comes from `runs.status` + `runs.waived`,
+  never from re-counting `run_results`.
+- `momentum-crm` — `mscrm.deals ⋈ companies` over the Momentum pooler (vault:
+  "Momentum Core / Supabase" / `CRM_DATABASE_URL`, filed 2026-08-14), pinned-CA TLS.
+- `personal-tasks` — tracking-schema PostgREST with creds in `.env.local`
+  (see `.env.example`), mirroring the tracking app's own due-soon semantics.
 
-| Subagent | Why it's blocked | What to do instead |
-|---|---|---|
-| `cacc-fleet` / `momentum-fleet` | the `agents` schema (ex-opsdeck) has no per-GitHub-org filter yet | build the subagent interface and query shape now; return `{ connected: false, reason: "agents schema has no org filter yet" }` until that filter exists |
-| `momentum-comms` | no mailbox/address identified yet | same pattern — `connected: false`, reason explaining what's missing |
-| `subscriptions-usage` | usage.andrewroach.xyz's backend/API is unexplored (Google-auth gated, nothing documented — see the `usage-andrewroach-stack` memory if you have memory access) | same pattern; this one needs someone to actually go open that codebase before it can be real, don't guess at its API |
+Still **known-blocked**, honestly stubbed in `src/subagents/stubs.ts`
+(`connected: false` + reason, rendered as "not configured"):
+
+| Subagent | Why it's blocked |
+|---|---|
+| `cacc-fleet` / `momentum-fleet` | the `agents` schema (ex-opsdeck) has no per-GitHub-org filter yet |
+| `momentum-comms` | no mailbox/address identified yet |
+| `subscriptions-usage` | usage.andrewroach.xyz's backend/API is unexplored — open that codebase before building, don't guess at its API |
+| token-spend ledger (Top panel spend + fleet spend slices) | no per-world spend ledger exists anywhere yet |
 
 **Never fabricate data to fill a blocked connector.** A "not configured" state in the UI
 is correct and expected; invented numbers are not. `ConnectorStatus` in
 `packages/shared` exists specifically for this.
 
-Everything else — `cacc-comms`, `cacc-checks`, `momentum-crm`, `personal-tasks` — has a
-real, reachable data source per `ARCHITECTURE.md` §3 and should be wired for real.
+Next pass: **Phase 3** (wake word, Murmur server-mode STT, local reasoning) — see
+`ROADMAP.md`. Murmur's server mode is a prerequisite that lives in the Murmur repo,
+not here.
+
+### Running it
+
+- `pnpm dev:core` (from repo root) — headless service, WS on 127.0.0.1:8721.
+- `pnpm dev:shell` — fullscreen HUD on every display; **Ctrl+Shift+J quits**.
+  `JARVIS_WINDOWED=1` opens plain windows instead (dev/testing).
+- `apps/jarvis-core/jarvis.config.json` (gitignored) pins this machine's display IDs;
+  without it the center-based geometry heuristic decides.
 
 ## Stack (already decided, don't re-litigate)
 

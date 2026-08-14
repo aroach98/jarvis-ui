@@ -52,9 +52,11 @@ bounds, loading the renderer with `?panel=<id>` so it knows which panel to rende
 
 Default resolution is a **geometry heuristic**, since Windows doesn't guarantee stable
 display ordering across reboots and hardcoding indices would break the first time a
-cable gets reseated: the topmost display (smallest y) → `top`; of the remaining three,
-leftmost (smallest x) → `left`, rightmost (largest x) → `right`, the one left over →
-`core`. `jarvis.config.json`'s `displayOverrides` (keyed by Electron's `display.id`) can
+cable gets reseated: the topmost display → `top`; of the remaining three, leftmost →
+`left`, rightmost → `right`, the one left over → `core`. Positions compare display
+**centers**, not top-left corners — on the real desk the flanking monitors are tall
+portrait panels whose top *edges* sit higher than the top monitor itself, so corner-y
+would misassign `top` to a side display (found in live testing 2026-08-14). `jarvis.config.json`'s `displayOverrides` (keyed by Electron's `display.id`) can
 pin a specific display to a specific panel when the heuristic gets it wrong — see
 `packages/shared`'s `JarvisConfig` type for the exact shape.
 
@@ -212,6 +214,7 @@ data.
   into it) before this subagent can be built for real.
 - Wake-word model needs training/tuning for the custom "Good morning Jarvis" phrase.
 - Voice choice for Pro-mode TTS is unpicked — needs a short shortlist + listen-through.
-- Multi-display config resolution (matching saved panel assignments to physical
-  displays across reboots) needs real-world testing on this machine's plus-shaped
-  4-monitor arrangement specifically (not a simple row).
+- ~~Multi-display config resolution needs real-world testing on the plus-shaped
+  4-monitor arrangement~~ — done 2026-08-14: corner-based "topmost" misassigned the
+  portrait flanks, fixed by comparing display centers (see §2); this machine's IDs are
+  additionally pinned in its gitignored `jarvis.config.json`.

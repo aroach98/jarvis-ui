@@ -1,21 +1,62 @@
-/**
- * jarvis-core entry point — not yet implemented.
- *
- * This is a scaffold, not a stub implementation: the package.json deps (ws,
- * @jarvis-ui/shared) and tsconfig are real and installable, but the actual
- * WS server, subagent registry, and voice pipeline described in
- * ../../ARCHITECTURE.md haven't been written. See ../../CLAUDE.md for the
- * build brief this repo was set up for.
- *
- * Shape to build toward (§3 of ARCHITECTURE.md):
- *   - a `ws` server on config.ws.port (see jarvis.config.example.json)
- *   - one module per subagent under ./subagents (cacc-comms, cacc-fleet,
- *     cacc-checks, momentum-comms, momentum-fleet, momentum-crm,
- *     personal-tasks, subscriptions-usage), each returning a ConnectorStatus
- *     alongside its data so a not-yet-wired connector renders as
- *     "not configured" instead of fabricated data — four of these are
- *     currently blocked, see ARCHITECTURE.md §8, and must degrade this way
- *     rather than stall the rest of the build
- *   - a poll loop (default 60s) broadcasting `ServerMessage` (panel-state)
- *     to subscribed clients, per packages/shared's WS protocol
- */
+import { existsSync, readFileSync } from "node:fs";
+import path from "node:path";
+import { DEFAULT_WS_PORT } from "@jarvis-ui/shared";
+import type { CorePanelState, CostMode, JarvisConfig, PanelState } from "@jarvis-ui/shared";
+import { packageDir } from "./lib/env.js";
+import { HudServer } from "./server.js";
+import { buildCaccPanel, buildMomentumPanel, buildTopPanel } from "./registry.js";
+
+function loadConfig(): JarvisConfig {
+  const p = process.env.JARVIS_CONFIG ?? path.join(packageDir, "jarvis.config.json");
+  if (!existsSync(p)) return {};
+  try {
+    return JSON.parse(readFileSync(p, "utf8")) as JarvisConfig;
+  } catch (err) {
+    console.warn(`[core] unreadable ${p}: ${(err as Error).message} — using defaults`);
+    return {};
+  }
+}
+
+const config = loadConfig();
+const pollMs = (config.pollSeconds ?? 60) * 1000;
+
+// Voice pipeline is Phase 3; until then the core panel reports idle + the
+// current cost mode (free by default — never silently pro).
+const coreState: CorePanelState = { voiceStatus: "idle", mode: "free" };
+
+const server = new HudServer(config.ws?.port ?? DEFAULT_WS_PORT, (mode: CostMode) => {
+  coreState.mode = mode;
+  console.log(`[core] mode → ${mode}`);
+  publishCore();
+});
+
+function publishCore(): void {
+  server.publish({ panel: "core", state: { ...coreState } });
+}
+
+const PANEL_BUILDERS: Array<() => Promise<PanelState>> = [
+  async () => ({ panel: "left", state: await buildCaccPanel() }),
+  async () => ({ panel: "right", state: await buildMomentumPanel() }),
+  async () => ({ panel: "top", state: await buildTopPanel() }),
+];
+
+let polling = false;
+async function pollOnce(): Promise<void> {
+  if (polling) return; // a slow upstream must not stack poll cycles
+  polling = true;
+  try {
+    await Promise.all(
+      PANEL_BUILDERS.map(async (build) => {
+        const state = await build();
+        server.publish(state);
+      }),
+    );
+  } finally {
+    polling = false;
+  }
+}
+
+publishCore();
+void pollOnce();
+setInterval(() => void pollOnce(), pollMs);
+console.log(`[core] polling every ${pollMs / 1000}s`);

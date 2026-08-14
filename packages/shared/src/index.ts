@@ -79,7 +79,14 @@ export interface CaccPanelState {
 // Right panel — Momentum
 // ---------------------------------------------------------------------------
 
-export type CrmStage = "discovery" | "proposal" | "live";
+/** Matches mscrm.deals.stage's CHECK constraint exactly — see clients repo 0001_crm_schema.sql. */
+export type CrmStage =
+  | "lead"
+  | "discovery"
+  | "proposal_sent"
+  | "negotiation"
+  | "won"
+  | "lost";
 
 export interface CrmClient {
   name: string;
@@ -159,7 +166,13 @@ export interface TopPanelState {
     connector: ConnectorStatus;
     items: TaskItem[];
   };
+  /**
+   * Backed by the token-spend ledger, which doesn't exist yet (ARCHITECTURE.md
+   * §8) — connector carries that fact so the renderer shows "no ledger" instead
+   * of a fabricated $0.00.
+   */
   spendTodayUsd: {
+    connector: ConnectorStatus;
     total: number;
     byWorld: Record<string, number>;
   };
@@ -203,4 +216,9 @@ export interface JarvisConfig {
   ws?: {
     port: number;
   };
+  /** Baseline panel refresh interval (ARCHITECTURE.md §2). Default 60. */
+  pollSeconds?: number;
 }
+
+/** Used by both apps when jarvis.config.json is absent or omits ws.port. */
+export const DEFAULT_WS_PORT = 8721;

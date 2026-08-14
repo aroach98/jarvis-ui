@@ -37,8 +37,10 @@ monospace readouts with tabular numerals, uppercase technical labels. Pulled fro
 Man HUD design conventions (circular reticles, arc-reactor motif) rather than a generic
 dark-mode dashboard look.
 
-Status: **not yet reviewed with the user.** Next step is iterating on this before Phase 1
-(real Electron shell) starts.
+Status: **approved and implemented** — Phase 1/2 (2026-08-14) ported this mockup's
+visual language and per-panel structure into `apps/jarvis-shell`'s renderer
+(`src/renderer/src/hud.css` + the four panel components). The mockup stays as the
+design reference; the sample numbers in it were replaced by live connector data.
 
 ## v1 — 4-panel row (superseded)
 

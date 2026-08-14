@@ -6,6 +6,12 @@
   "engines": {
     "node": ">=22"
   },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "electron",
+      "esbuild"
+    ]
+  },
   "scripts": {
     "dev:core": "pnpm --filter @jarvis-ui/core dev",
     "dev:shell": "pnpm --filter @jarvis-ui/shell dev",

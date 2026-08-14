@@ -8,19 +8,19 @@ Phased so each stage is independently useful and testable before the next starts
 - [x] Panel → display mapping decided: geometry heuristic + `jarvis.config.json` overrides
 - [x] Workspace scaffolded (pnpm, TS, shared contracts) — see `CLAUDE.md`
 
-## Phase 1 + Phase 2 — current kickoff target
-Real Electron shell on real displays, wired to real data where a source exists. See
-`CLAUDE.md` for the full brief, including which 4 subagents are known-blocked and how
-they should degrade (`connected: false` + reason, never fabricated data) rather than
-stall the rest of the build:
-- `jarvis-shell` main process: real multi-display window creation, one fullscreen
-  `BrowserWindow` per display
-- Panel UI components built against the approved mockup, reading live `packages/shared`
-  state over WS
-- `jarvis-core`: real WS server, subagent registry, poll loop
-- Real subagents: `cacc-comms`, `cacc-checks`, `momentum-crm`, `personal-tasks` (all have
-  reachable data sources today)
-- Known-blocked, build the interface but don't fake the data: `cacc-fleet`,
+## Phase 1 + Phase 2 — done (2026-08-14)
+Real Electron shell on real displays, wired to real data where a source exists. The 4
+known-blocked subagents degrade as designed (`connected: false` + reason, never
+fabricated data) — see `CLAUDE.md` for current state:
+- [x] `jarvis-shell` main process: real multi-display window creation, one fullscreen
+  `BrowserWindow` per display (center-based geometry heuristic + `displayOverrides`;
+  verified live on the plus-shaped 4-monitor desk)
+- [x] Panel UI components built against the approved mockup, reading live
+  `packages/shared` state over WS (auto-reconnect, per-section offline states)
+- [x] `jarvis-core`: real WS server, subagent registry, poll loop (60s default)
+- [x] Real subagents: `cacc-comms` (Graph), `cacc-checks` (Proving Ground DB + Vercel),
+  `momentum-crm` (mscrm pooler), `personal-tasks` (tracking PostgREST)
+- [x] Known-blocked, interface built, data honestly absent: `cacc-fleet`,
   `momentum-fleet`, `momentum-comms`, `subscriptions-usage`
 
 ## Phase 3 — Voice, free mode only

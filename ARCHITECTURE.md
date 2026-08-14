@@ -153,10 +153,12 @@ static version is proven out.
 - Every stage reports health (`CorePanelState.pipeline`) and the core panel renders
   wake/stt/nlu/tts chips; a dead stage degrades that chip, never the HUD.
 
-## 5. "Good morning Jarvis" briefing
+## 5. "Good morning Jarvis" briefing (built 2026-08-14)
 
-Trigger phrase, handled specially rather than routed through general intent
-classification:
+Trigger: any post-wake utterance containing "good morning" — handled specially
+in the orchestrator, never routed through intent classification. (A dedicated
+trained wake phrase remains open in §8; today it's "hey jarvis… good
+morning".) As built:
 
 1. Start music quietly in the background. Preferred: control your existing Spotify
    session via the Spotify Web API (start/resume playback on your active device at a
@@ -224,8 +226,17 @@ data.
   site is Google-auth-gated and its API/data model isn't documented anywhere jarvis-ui
   can currently see. Needs a look at that codebase (or a service-account/API-key path
   into it) before this subagent can be built for real.
-- Wake-word model needs training/tuning for the custom "Good morning Jarvis" phrase.
-- Voice choice for Pro-mode TTS is unpicked — needs a short shortlist + listen-through.
+- Wake-word model needs training/tuning for custom phrases (bare "Jarvis",
+  "Good morning Jarvis") — today both ride the pretrained "hey jarvis" model,
+  with "good morning" detected in the utterance that follows.
+- ~~Voice choice for Pro-mode TTS~~ — defaulted to ElevenLabs' prebuilt
+  "Daniel" (configurable via `ELEVENLABS_VOICE_ID`); do a listen-through when
+  the key is filed.
+- **Pending personal credentials** (each fails closed until filed in
+  `apps/jarvis-core/.env.local`; none existed in the personal secrets sheet as
+  of 2026-08-14): `ANTHROPIC_API_KEY` (pro reasoning), `ELEVENLABS_API_KEY`
+  (pro voice), `SPOTIFY_CLIENT_ID/SECRET/REFRESH_TOKEN` (briefing music —
+  needs a one-time OAuth consent with playback scopes).
 - ~~Multi-display config resolution needs real-world testing on the plus-shaped
   4-monitor arrangement~~ — done 2026-08-14: corner-based "topmost" misassigned the
   portrait flanks, fixed by comparing display centers (see §2); this machine's IDs are

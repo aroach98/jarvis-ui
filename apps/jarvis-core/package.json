@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.117.1",
     "@jarvis-ui/shared": "workspace:*",
     "pg": "^8.13.0",
     "ws": "^8.18.0"

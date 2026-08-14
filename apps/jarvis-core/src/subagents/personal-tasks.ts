@@ -43,8 +43,10 @@ export async function fetchPersonalTasks(): Promise<TopPanelState["tasks"]> {
     );
     if (!res.ok) throw new Error(`PostgREST HTTP ${res.status}`);
     const tasks = (await res.json()) as TrackingTask[];
+    const today = new Date().toISOString().slice(0, 10);
     return {
       connector: { connected: true },
+      directives: { attention: tasks.some((t) => t.next_due < today) },
       items: tasks.map((t) => ({
         label: t.priority === "critical" ? `❗ ${t.title}` : t.title,
         due: taskDueLabel(t.next_due),

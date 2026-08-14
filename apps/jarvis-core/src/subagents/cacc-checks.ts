@@ -123,7 +123,11 @@ export async function fetchCaccChecks(): Promise<CaccPanelState["checks"]> {
       ...all.filter((i) => i.verdict === "ok"),
     ];
 
-    return { connector: { connected: true }, items };
+    return {
+      connector: { connected: true },
+      directives: { attention: items.some((i) => i.verdict === "failed") },
+      items,
+    };
   } catch (err) {
     return {
       connector: { connected: false, reason: `Proving Ground: ${(err as Error).message}` },

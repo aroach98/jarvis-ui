@@ -89,8 +89,8 @@ export function CorePanel(): JSX.Element {
           <div className="core-status">{STATUS_LABEL[state.voiceStatus]}</div>
           <div className="core-substatus">
             {state.voiceStatus === "idle"
-              ? "voice pipeline lands in Phase 3 — panels refresh regardless"
-              : 'wake phrase armed · "Jarvis"'}
+              ? 'wake phrase armed · say "hey jarvis"'
+              : "at your service, sir"}
           </div>
 
           {state.pipeline && (
@@ -144,12 +144,13 @@ export function CorePanel(): JSX.Element {
                   })}
                 </>
               ) : (
-                <>no routes yet — voice intent routing lands in Phase 3</>
+                <>no routes yet — try &quot;hey jarvis&quot;</>
               )}
             </div>
             <div className="briefing-note">
-              <b>&quot;Good morning, Jarvis&quot;</b> starts AC/DC quietly, then a 3-line flash
-              briefing — CACC, Momentum, Today — 15 words or less each. (Phase 4.)
+              <b>&quot;Good morning&quot;</b> after the wake phrase: ducked AC/DC (when Spotify is
+              wired) and a 3-line flash briefing — CACC, Momentum, Today. &quot;That&apos;s
+              enough&quot; stops the music.
             </div>
           </div>
         </div>

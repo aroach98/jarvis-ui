@@ -38,7 +38,11 @@ export function LeftPanel(): JSX.Element {
         <Awaiting />
       ) : (
         <div className="panel-body">
-          <Section title="Inbox · andrew.roach@cacadets.org" grow={5}>
+          <Section
+            title="Inbox · andrew.roach@cacadets.org"
+            grow={5}
+            attention={state.inbox.directives?.attention}
+          >
             {!state.inbox.connector.connected ? (
               <SectionOffline status={state.inbox.connector} />
             ) : (
@@ -100,7 +104,11 @@ export function LeftPanel(): JSX.Element {
             )}
           </Section>
 
-          <Section title="Checks & deploys" grow={6}>
+          <Section
+            title="Checks & deploys"
+            grow={6}
+            attention={state.checks.directives?.attention}
+          >
             {!state.checks.connector.connected ? (
               <SectionOffline status={state.checks.connector} />
             ) : (

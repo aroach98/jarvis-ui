@@ -68,7 +68,7 @@ export function TopPanel(): JSX.Element {
               )}
             </Section>
 
-            <Section title="Taskers due · Andrew OS">
+            <Section title="Taskers due · Andrew OS" attention={state.tasks.directives?.attention}>
               {!state.tasks.connector.connected ? (
                 <SectionOffline status={state.tasks.connector} />
               ) : state.tasks.items.length === 0 ? (

@@ -36,6 +36,7 @@ function publishCore(): void {
 
 const voice = new VoiceOrchestrator(config.voice, {
   getPanelState: (panel) => server.getState(panel),
+  getMode: () => coreState.mode,
   setMode: (mode) => {
     coreState.mode = mode;
     console.log(`[core] mode → ${mode} (voice)`);

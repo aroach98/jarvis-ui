@@ -29,15 +29,18 @@ export function Section({
   title,
   right,
   grow = 1,
+  attention = false,
   children,
 }: {
   title: string;
   right?: JSX.Element | string | null;
   grow?: number;
+  /** Generative-UI directive: the owning subagent flagged this section. */
+  attention?: boolean;
   children: React.ReactNode;
 }): JSX.Element {
   return (
-    <div className="section" style={{ flexGrow: grow }}>
+    <div className={`section${attention ? " attention" : ""}`} style={{ flexGrow: grow }}>
       <Reticle className="section-reticle" />
       <div className="section-head">
         <span className="section-title">{title}</span>

@@ -38,12 +38,14 @@ export async function fetchCaccInbox(): Promise<CaccPanelState["inbox"]> {
         urgent: isUrgent(m),
       }));
 
+    const flagged =
+      flaggedCount["@odata.count"] ??
+      messages.value.filter((m) => m.flag?.flagStatus === "flagged").length;
     return {
       connector: { connected: true },
+      directives: { attention: flagged > 0 },
       unread: folder.unreadItemCount,
-      flagged:
-        flaggedCount["@odata.count"] ??
-        messages.value.filter((m) => m.flag?.flagStatus === "flagged").length,
+      flagged,
       items,
     };
   } catch (err) {

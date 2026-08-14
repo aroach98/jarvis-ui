@@ -14,11 +14,19 @@ import type {
 import { packageDir } from "../lib/env.js";
 import { MurmurStt } from "./stt.js";
 import { FreeNlu } from "./nlu.js";
+import type { Intent } from "./nlu.js";
+import { ProNlu } from "./pro.js";
 import { SapiTts } from "./tts.js";
+import { ElevenTts } from "./eleven.js";
+import { SpotifyPlayer } from "./spotify.js";
 import { answerFromState, contextForChat } from "./answers.js";
+import { buildBriefing } from "./briefing.js";
+
+const MUSIC_TIMEOUT_MS = 10 * 60 * 1000;
 
 export interface OrchestratorHooks {
   getPanelState: (panel: PanelId) => PanelState | undefined;
+  getMode: () => CostMode;
   setMode: (mode: CostMode) => void;
   /** Push voiceStatus / lastRoute / pipeline changes to the core panel. */
   onVoiceChange: (
@@ -29,14 +37,20 @@ export interface OrchestratorHooks {
 }
 
 /**
- * Phase 3 voice pipeline (free mode only): wake-word sidecar → Murmur STT →
- * local intent routing → answer from cached panel state → SAPI TTS. Every
- * stage fails closed into the pipeline status the core panel shows.
+ * The voice pipeline: wake-word sidecar → Murmur STT → intent routing →
+ * answer → TTS. The free/pro cost toggle (ARCHITECTURE.md §6) selects the
+ * reasoning and voice tiers per utterance — free = Ollama + SAPI ($0),
+ * pro = Claude + ElevenLabs — and every pro resource fails closed to its
+ * free counterpart rather than dropping the turn. Panel polling is always
+ * free regardless of mode.
  */
 export class VoiceOrchestrator {
   private readonly stt: MurmurStt;
-  private readonly nlu: FreeNlu;
-  private readonly tts: SapiTts;
+  private readonly freeNlu: FreeNlu;
+  private readonly proNlu: ProNlu;
+  private readonly sapi: SapiTts;
+  private readonly eleven: ElevenTts;
+  private readonly spotify = new SpotifyPlayer();
   private readonly eventsPort: number;
   private readonly sidecarCfg: NonNullable<JarvisConfig["voice"]>["sidecar"];
   private server?: http.Server;
@@ -44,6 +58,7 @@ export class VoiceOrchestrator {
   private sidecarStatus: ConnectorStatus = { connected: false, reason: "sidecar not started" };
   private lastHeartbeat = 0;
   private busy = false;
+  private musicTimer?: NodeJS.Timeout;
   private pipeline: VoicePipelineStatus;
 
   constructor(
@@ -51,18 +66,20 @@ export class VoiceOrchestrator {
     private readonly hooks: OrchestratorHooks,
   ) {
     this.stt = new MurmurStt(voice?.murmurUrl ?? "http://127.0.0.1:8722");
-    this.nlu = new FreeNlu(
+    this.freeNlu = new FreeNlu(
       voice?.ollama?.url ?? "http://192.168.1.62:11434",
       voice?.ollama?.model ?? "huihui_ai/qwen2.5-coder-abliterate:14b",
     );
-    this.tts = new SapiTts(voice?.tts?.voice, voice?.tts?.rate ?? 0);
+    this.proNlu = new ProNlu(voice?.pro?.model);
+    this.sapi = new SapiTts(voice?.tts?.voice, voice?.tts?.rate ?? 0);
+    this.eleven = new ElevenTts(voice?.cloudTts?.voiceId);
     this.eventsPort = voice?.eventsPort ?? 8723;
     this.sidecarCfg = voice?.sidecar;
     this.pipeline = {
       wake: this.sidecarStatus,
       stt: { connected: false, reason: "not checked yet" },
       nlu: { connected: false, reason: "not checked yet" },
-      tts: this.tts.status(),
+      tts: this.sapi.status(),
     };
   }
 
@@ -135,22 +152,31 @@ export class VoiceOrchestrator {
         return;
       }
       console.log(`[voice] heard: "${text}"`);
-      const intent = await this.nlu.classify(text);
+
+      // §5: the trigger phrase is handled specially, never routed.
+      if (/\bgood\s+morning\b/i.test(text)) {
+        await this.runBriefing(text);
+        return;
+      }
+
+      const intent = await this.classify(text);
       const route = {
         subagent: intentSubagent(intent),
         utterance: text,
         at: new Date().toISOString(),
       };
       if (intent.kind === "set_mode") this.hooks.setMode(intent.mode);
+      if (intent.kind === "stop_music") this.stopMusic();
+
       let spoken = answerFromState(intent, this.hooks.getPanelState);
       if (spoken === null) {
         spoken =
-          (await this.nlu.chat(text, contextForChat(this.hooks.getPanelState))) ??
-          "I can't reach the local model right now, and that isn't a question I can answer from the panels.";
+          (await this.chat(text)) ??
+          "I'm afraid I can't reach a reasoning model just now, sir, and the panels don't hold that answer.";
       }
       this.hooks.onVoiceChange("speaking", route, this.pipeline);
       console.log(`[voice] answer: "${spoken}"`);
-      await this.tts.speak(spoken);
+      await this.speak(spoken);
       this.hooks.onVoiceChange("idle", route, this.pipeline);
     } catch (err) {
       console.warn(`[voice] utterance failed: ${(err as Error).message}`);
@@ -158,6 +184,58 @@ export class VoiceOrchestrator {
     } finally {
       this.busy = false;
     }
+  }
+
+  /** §5: ducked AC/DC (when Spotify is wired), then 3 lines ≤15 words each. */
+  private async runBriefing(utterance: string): Promise<void> {
+    const route = { subagent: "briefing", utterance, at: new Date().toISOString() };
+    this.hooks.onVoiceChange("speaking", route, this.pipeline);
+    const musicStarted = this.spotify.available() && (await this.spotify.startMusic());
+    if (musicStarted) {
+      clearTimeout(this.musicTimer);
+      this.musicTimer = setTimeout(() => void this.spotify.stopMusic(), MUSIC_TIMEOUT_MS);
+    }
+    const lines = buildBriefing(this.hooks.getPanelState);
+    console.log(`[voice] briefing: ${lines.join(" | ")}`);
+    await this.speak("Good morning, sir.");
+    for (const line of lines) await this.speak(line);
+    this.hooks.onVoiceChange("idle", route, this.pipeline);
+  }
+
+  private stopMusic(): void {
+    clearTimeout(this.musicTimer);
+    void this.spotify.stopMusic();
+  }
+
+  /** Mode-aware routing: pro tries Claude first, always landing on free. */
+  private async classify(text: string): Promise<Intent> {
+    if (this.hooks.getMode() === "pro") {
+      const intent = await this.proNlu.classify(text);
+      if (intent !== null) return intent;
+    }
+    return this.freeNlu.classify(text);
+  }
+
+  private async chat(text: string): Promise<string | null> {
+    const context = contextForChat(this.hooks.getPanelState);
+    if (this.hooks.getMode() === "pro") {
+      const answer = await this.proNlu.chat(text, context);
+      if (answer !== null) return answer;
+    }
+    return this.freeNlu.chat(text, context);
+  }
+
+  /** Mode-aware voice: pro tries ElevenLabs, failing closed to SAPI. */
+  private async speak(text: string): Promise<void> {
+    if (this.hooks.getMode() === "pro" && this.eleven.status().connected) {
+      try {
+        await this.eleven.speak(text);
+        return;
+      } catch (err) {
+        console.warn(`[voice] cloud TTS failed, using SAPI: ${(err as Error).message}`);
+      }
+    }
+    await this.sapi.speak(text);
   }
 
   private startSidecar(): void {
@@ -196,7 +274,12 @@ export class VoiceOrchestrator {
 
   private async refreshPipeline(): Promise<void> {
     const heartbeatFresh = Date.now() - this.lastHeartbeat < 45_000;
-    const [stt, nlu] = await Promise.all([this.stt.health(), this.nlu.health()]);
+    const [stt, freeNlu] = await Promise.all([this.stt.health(), this.freeNlu.health()]);
+    const pro = this.hooks.getMode() === "pro";
+    // In pro mode the chips report the pro tier's own health; the free tier
+    // is always there beneath it as the fallback.
+    const nlu: ConnectorStatus = pro ? this.proNlu.status() : freeNlu;
+    const tts: ConnectorStatus = pro ? this.eleven.status() : this.sapi.status();
     this.pipeline = {
       wake: heartbeatFresh
         ? this.sidecarStatus
@@ -205,7 +288,7 @@ export class VoiceOrchestrator {
           : this.sidecarStatus,
       stt,
       nlu,
-      tts: this.tts.status(),
+      tts,
     };
     this.hooks.onVoiceChange(this.busy ? "routing" : "idle", undefined, this.pipeline);
   }
@@ -223,6 +306,8 @@ function intentSubagent(intent: { kind: string }): string {
       return "personal-tasks";
     case "set_mode":
       return "mode";
+    case "stop_music":
+      return "music";
     default:
       return "chat";
   }

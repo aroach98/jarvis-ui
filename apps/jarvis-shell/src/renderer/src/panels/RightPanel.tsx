@@ -100,7 +100,7 @@ export function RightPanel(): JSX.Element {
             )}
           </Section>
 
-          <Section title="CRM pipeline" grow={4}>
+          <Section title="CRM pipeline" grow={4} attention={state.crm.directives?.attention}>
             {!state.crm.connector.connected ? (
               <SectionOffline status={state.crm.connector} />
             ) : state.crm.clients.length === 0 ? (

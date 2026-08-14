@@ -1,4 +1,5 @@
 import type { ConnectorStatus } from "@jarvis-ui/shared";
+import { PERSONA_PROMPT } from "./persona.js";
 
 export type Intent =
   | { kind: "cacc_inbox" }
@@ -6,6 +7,7 @@ export type Intent =
   | { kind: "momentum_crm" }
   | { kind: "personal_tasks" }
   | { kind: "set_mode"; mode: "free" | "pro" }
+  | { kind: "stop_music" }
   | { kind: "chat" };
 
 /**
@@ -90,10 +92,10 @@ export class FreeNlu {
         body: JSON.stringify({
           model: this.model,
           prompt:
-            "You are Jarvis, a concise voice assistant. The DATA block below is " +
-            "the live state of the user's dashboards — answer ONLY from it, in " +
-            "at most two short spoken sentences. If the data can't answer, say so.\n" +
-            `DATA:\n${context}\n\nUser: ${utterance}\nJarvis:`,
+            `${PERSONA_PROMPT}\n` +
+            "The DATA block below is the live state of the user's dashboards — " +
+            "answer ONLY from it. If the data can't answer, say so plainly.\n" +
+            `DATA:\n${context}\n\nUser: ${utterance}\nJARVIS:`,
           stream: false,
           options: { temperature: 0.3, num_predict: 120 },
         }),
@@ -111,6 +113,9 @@ export class FreeNlu {
 
 export function classifyByRules(utterance: string): Intent | null {
   const u = utterance.toLowerCase();
+  if (/\b(that'?s enough|stop the music|music off|quiet,? (please|jarvis))\b/.test(u)) {
+    return { kind: "stop_music" };
+  }
   if (/\b(go|switch( to)?)\s+(premium|pro)\b/.test(u)) return { kind: "set_mode", mode: "pro" };
   if (/\b(save mode|free mode|go free)\b/.test(u)) return { kind: "set_mode", mode: "free" };
   if (/\b(inbox|e-?mails?|messages?|unread|flagged)\b/.test(u)) return { kind: "cacc_inbox" };

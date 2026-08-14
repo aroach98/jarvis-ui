@@ -6,6 +6,7 @@ import type {
   TopPanelState,
 } from "@jarvis-ui/shared";
 import type { Intent } from "./nlu.js";
+import { plural } from "./persona.js";
 
 type StateLookup = (panel: PanelId) => PanelState | undefined;
 
@@ -13,66 +14,81 @@ type StateLookup = (panel: PanelId) => PanelState | undefined;
  * Deterministic spoken answers composed from cached panel state — the free
  * path ARCHITECTURE.md §3 describes ("answer from cached panel state, no API
  * call"). Never invents numbers: a disconnected connector is said out loud.
+ * Phrasing follows the butler persona (persona.ts).
  */
 export function answerFromState(intent: Intent, lookup: StateLookup): string | null {
   switch (intent.kind) {
     case "cacc_inbox": {
       const s = stateOf<CaccPanelState>(lookup, "left");
-      if (!s) return "I don't have CACC panel state yet.";
-      if (!s.inbox.connector.connected) return "The CACC inbox connector is offline.";
+      if (!s) return "I don't yet have the CACC panel state, sir.";
+      if (!s.inbox.connector.connected) {
+        return "I'm afraid the CACC inbox connector is offline, sir.";
+      }
       const top = s.inbox.items[0];
-      const headline = top ? ` Most recent: ${top.from}, ${top.subject}.` : "";
-      return `${s.inbox.unread} unread, ${s.inbox.flagged} flagged.${headline}`;
+      const headline = top ? ` The most recent is from ${top.from}: ${top.subject}.` : "";
+      return `You have ${plural(s.inbox.unread, "unread message")}, sir, ${s.inbox.flagged} of them flagged.${headline}`;
     }
     case "cacc_checks": {
       const s = stateOf<CaccPanelState>(lookup, "left");
-      if (!s) return "I don't have CACC panel state yet.";
-      if (!s.checks.connector.connected) return "The checks connector is offline.";
+      if (!s) return "I don't yet have the CACC panel state, sir.";
+      if (!s.checks.connector.connected) {
+        return "I'm afraid the checks connector is offline, sir.";
+      }
       const bad = s.checks.items.filter((i) => i.verdict === "failed");
       const waived = s.checks.items.filter((i) => i.verdict === "waived");
       if (bad.length === 0 && waived.length === 0) {
-        return `All ${s.checks.items.length} checks are green.`;
+        return `All ${s.checks.items.length} checks are green, sir. Rather a good day.`;
       }
       const badPart =
         bad.length > 0
-          ? `${bad.length} failing: ${bad
+          ? `${plural(bad.length, "check")} failing, sir: ${bad
               .slice(0, 3)
               .map((b) => b.site)
               .join(", ")}.`
           : "";
-      const waivedPart = waived.length > 0 ? ` ${waived.length} waived.` : "";
+      const waivedPart = waived.length > 0 ? ` ${bad.length > 0 ? "" : "Sir, "}${waived.length} waived.` : "";
       return `${badPart}${waivedPart}`.trim();
     }
     case "momentum_crm": {
       const s = stateOf<MomentumPanelState>(lookup, "right");
-      if (!s) return "I don't have Momentum panel state yet.";
-      if (!s.crm.connector.connected) return "The CRM connector is offline.";
-      if (s.crm.clients.length === 0) return "No open deals in the pipeline.";
+      if (!s) return "I don't yet have the Momentum panel state, sir.";
+      if (!s.crm.connector.connected) {
+        return "I'm afraid the CRM connector is offline, sir.";
+      }
+      if (s.crm.clients.length === 0) return "The pipeline is empty at present, sir.";
       const list = s.crm.clients
         .slice(0, 4)
-        .map((c) => `${c.name}, ${c.stage.replace(/_/g, " ")}`)
+        .map((c) => `${c.name} at ${c.stage.replace(/_/g, " ")}`)
         .join("; ");
-      return `${s.crm.clients.length} open deals. ${list}.`;
+      return `${plural(s.crm.clients.length, "open deal")} in the pipeline, sir: ${list}.`;
     }
     case "personal_tasks": {
       const s = stateOf<TopPanelState>(lookup, "top");
-      if (!s) return "I don't have the top panel state yet.";
-      if (!s.tasks.connector.connected) return "The taskers connector is offline.";
-      if (s.tasks.items.length === 0) return "Nothing due in the next two weeks.";
+      if (!s) return "I don't yet have the top panel state, sir.";
+      if (!s.tasks.connector.connected) {
+        return "I'm afraid the taskers connector is offline, sir.";
+      }
+      if (s.tasks.items.length === 0) {
+        return "Nothing on the docket for the next two weeks, sir.";
+      }
       const list = s.tasks.items
         .slice(0, 3)
         .map((t) => `${t.label.replace(/^❗ /, "")}, ${t.due}`)
         .join("; ");
-      return `${s.tasks.items.length} taskers coming up. ${list}.`;
+      return `${plural(s.tasks.items.length, "tasker")} coming up, sir: ${list}.`;
     }
     case "set_mode":
-      return intent.mode === "pro" ? "Premium mode." : "Save mode.";
+      return intent.mode === "pro"
+        ? "Premium mode engaged, sir."
+        : "Reverting to save mode, sir. Frugality suits us.";
+    case "stop_music":
+      return "Very good, sir.";
     case "chat":
       return null;
   }
 }
 
-/** Compact real-data context block for free-form questions (local model only). */
+/** Compact real-data context block for free-form questions. */
 export function contextForChat(lookup: StateLookup): string {
   const parts: string[] = [];
   const left = stateOf<CaccPanelState>(lookup, "left");
@@ -101,7 +117,7 @@ export function contextForChat(lookup: StateLookup): string {
   return parts.length > 0 ? parts.join("\n") : "(no connected data)";
 }
 
-function stateOf<T>(lookup: StateLookup, panel: PanelId): T | undefined {
+export function stateOf<T>(lookup: StateLookup, panel: PanelId): T | undefined {
   const ps = lookup(panel);
   return ps ? (ps.state as T) : undefined;
 }

@@ -55,17 +55,33 @@ answers from cached panel state, SAPI TTS). Pipeline health renders as chips on 
 core panel. Test any stage without a mic:
 `sidecar/.venv/Scripts/python wake_listener.py --send-wav file.wav`.
 
-Next pass: **Phase 4** (pro mode via Claude Agent SDK, cloud TTS voice, the
-"Good morning Jarvis" briefing + Spotify duck, custom wake phrases) — see `ROADMAP.md`.
+**Phase 4 + 5 shipped 2026-08-14 — the roadmap is complete.** Pro mode routes
+reasoning to Claude (official SDK, claude-opus-5, refusal fallbacks) and voice to
+ElevenLabs, each failing closed to the free tier (Ollama/SAPI) with the reason on the
+core panel's chips; no personal Anthropic/ElevenLabs/Spotify credentials exist yet, so
+those tiers currently fall back (see `.env.example` + ARCHITECTURE.md §8). "Good
+morning" post-wake triggers the ducked-AC/DC briefing (music skipped until Spotify
+OAuth is set up); "that's enough" stops it. All spoken output uses the JARVIS butler
+persona ("sir", composed diction — vernacular only, deliberately not a voice clone;
+`src/voice/persona.ts`). Generative-UI v1: subagents set
+`SectionDirectives.attention` and the renderer pulses that section.
+
+What remains is not phases but blockers: the four stubbed connectors (fleet org
+filter, Momentum mailbox, usage backend, spend ledger) and the pending credentials —
+all listed in ARCHITECTURE.md §8.
 
 ### Running it
 
-- `pnpm dev:core` (from repo root) — headless service, WS on 127.0.0.1:8721, voice
-  events on :8723, spawns the wake-word sidecar (one-time: `sidecar/setup.ps1`).
+- **Autostart is installed on this machine**: scheduled tasks `JarvisCore` +
+  `JarvisShell` (logon, hidden consoles, restart ×3 on failure) + a Murmur Startup
+  shortcut. Re-register anytime with `scripts/install-autostart.ps1`; remove via
+  `Unregister-ScheduledTask`.
+- Manual: `pnpm dev:core` (WS :8721, voice events :8723, spawns the wake sidecar —
+  one-time `sidecar/setup.ps1`) and `pnpm dev:shell` (fullscreen HUD; **Ctrl+Shift+J
+  quits**; `JARVIS_WINDOWED=1` for plain windows). `scripts/start-shell.cmd` runs the
+  production build instead of the dev server.
 - Murmur (tray app) serves STT automatically while running; `Murmur --server` for
   headless.
-- `pnpm dev:shell` — fullscreen HUD on every display; **Ctrl+Shift+J quits**.
-  `JARVIS_WINDOWED=1` opens plain windows instead (dev/testing).
 - `apps/jarvis-core/jarvis.config.json` (gitignored) pins this machine's display IDs;
   without it the center-based geometry heuristic decides.
 

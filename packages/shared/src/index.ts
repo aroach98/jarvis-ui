@@ -45,6 +45,17 @@ export interface ConnectorStatus {
   reason?: string;
 }
 
+/**
+ * Generative-UI v1 (ROADMAP Phase 5): a data-owning subagent may flag its
+ * panel section for visual emphasis — the renderer amplifies it (glow, pulse)
+ * without the subagent knowing anything about CSS. Presentation directives,
+ * not layout control; full layout generation stays a future idea.
+ */
+export interface SectionDirectives {
+  /** The subagent judges this section needs the user's eye right now. */
+  attention?: boolean;
+}
+
 // ---------------------------------------------------------------------------
 // Left panel — CACC
 // ---------------------------------------------------------------------------
@@ -60,17 +71,20 @@ export interface CheckItem {
 export interface CaccPanelState {
   inbox: {
     connector: ConnectorStatus;
+    directives?: SectionDirectives;
     unread: number;
     flagged: number;
     items: InboxItem[];
   };
   fleet: {
     connector: ConnectorStatus;
+    directives?: SectionDirectives;
     spendTodayUsd: number;
     runs: FleetRun[];
   };
   checks: {
     connector: ConnectorStatus;
+    directives?: SectionDirectives;
     items: CheckItem[];
   };
 }
@@ -96,17 +110,20 @@ export interface CrmClient {
 export interface MomentumPanelState {
   inbox: {
     connector: ConnectorStatus;
+    directives?: SectionDirectives;
     unread: number;
     dueThisWeek: number;
     items: InboxItem[];
   };
   fleet: {
     connector: ConnectorStatus;
+    directives?: SectionDirectives;
     spendTodayUsd: number;
     runs: FleetRun[];
   };
   crm: {
     connector: ConnectorStatus;
+    directives?: SectionDirectives;
     clients: CrmClient[];
   };
   /** Phase 2+, not designed yet (ARCHITECTURE.md §2) — undefined until the outreach system exists. */
@@ -181,6 +198,7 @@ export interface TopPanelState {
   /** Section content is still open — see ARCHITECTURE.md §2 and ROADMAP.md. */
   tasks: {
     connector: ConnectorStatus;
+    directives?: SectionDirectives;
     items: TaskItem[];
   };
   /**
@@ -252,6 +270,16 @@ export interface JarvisConfig {
       voice?: string;
       /** SAPI rate -10..10. Default 0. */
       rate?: number;
+    };
+    /** Pro-mode reasoning (Claude). Key comes from .env.local, never config. */
+    pro?: {
+      /** Default claude-opus-5. */
+      model?: string;
+    };
+    /** Pro-mode cloud TTS (ElevenLabs). Key comes from .env.local. */
+    cloudTts?: {
+      /** ElevenLabs voice id. Default: the prebuilt "Daniel" voice. */
+      voiceId?: string;
     };
     sidecar?: {
       /** Spawn the wake-word sidecar automatically. Default true. */

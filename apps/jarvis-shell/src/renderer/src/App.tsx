@@ -26,6 +26,10 @@ function resolvePanelFromQuery(): PanelId {
 function useHudScale(): void {
   useEffect(() => {
     const apply = (): void => {
+      // An earlier build scaled via body zoom; a hot-reloaded window keeps that
+      // inline style forever unless it's explicitly cleared, and zoom × 100vh
+      // pushes the panel off the bottom of the screen.
+      (document.body.style as CSSStyleDeclaration & { zoom: string }).zoom = "";
       const w = window.innerWidth;
       const h = window.innerHeight;
       // Tall portrait flanks sit further out on the desk — boost them extra.

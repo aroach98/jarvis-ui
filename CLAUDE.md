@@ -47,13 +47,23 @@ Still **known-blocked**, honestly stubbed in `src/subagents/stubs.ts`
 is correct and expected; invented numbers are not. `ConnectorStatus` in
 `packages/shared` exists specifically for this.
 
-Next pass: **Phase 3** (wake word, Murmur server-mode STT, local reasoning) — see
-`ROADMAP.md`. Murmur's server mode is a prerequisite that lives in the Murmur repo,
-not here.
+**Phase 3 voice (free mode) shipped 2026-08-14** — see `ARCHITECTURE.md` §4 for the
+as-built pipeline. Summary: `sidecar/wake_listener.py` (openWakeWord "hey jarvis",
+owns the mic, autostarted by jarvis-core) → Murmur server-mode STT on :8722 (lives in
+the Murmur repo) → `src/voice/` (rules-first routing, Ollama fallback, deterministic
+answers from cached panel state, SAPI TTS). Pipeline health renders as chips on the
+core panel. Test any stage without a mic:
+`sidecar/.venv/Scripts/python wake_listener.py --send-wav file.wav`.
+
+Next pass: **Phase 4** (pro mode via Claude Agent SDK, cloud TTS voice, the
+"Good morning Jarvis" briefing + Spotify duck, custom wake phrases) — see `ROADMAP.md`.
 
 ### Running it
 
-- `pnpm dev:core` (from repo root) — headless service, WS on 127.0.0.1:8721.
+- `pnpm dev:core` (from repo root) — headless service, WS on 127.0.0.1:8721, voice
+  events on :8723, spawns the wake-word sidecar (one-time: `sidecar/setup.ps1`).
+- Murmur (tray app) serves STT automatically while running; `Murmur --server` for
+  headless.
 - `pnpm dev:shell` — fullscreen HUD on every display; **Ctrl+Shift+J quits**.
   `JARVIS_WINDOWED=1` opens plain windows instead (dev/testing).
 - `apps/jarvis-core/jarvis.config.json` (gitignored) pins this machine's display IDs;

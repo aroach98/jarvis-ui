@@ -79,7 +79,9 @@ body{
   position: relative;
   background: var(--bg-panel);
   border: 1px solid var(--line);
-  height: 100vh;
+  /* 100% up the html/body/#root chain — not vh, which any residual zoom or
+     scrollbar quirk can push past the actual screen */
+  height: 100%;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -345,6 +347,8 @@ body{
 .wave.idle i{ animation-duration: 3.6s; opacity: 0.3; }
 .wave.speaking i, .wave.listening i{ animation-duration: 0.9s; opacity: 0.95; }
 .wave.routing i{ animation-duration: 1.6s; }
+
+.pipeline-chips{ display:flex; gap: 0.8rem; justify-content: center; }
 
 .mode-toggle{ display:flex; border: 1px solid var(--line-bright); width: fit-content; margin: 0.4rem auto; }
 .mode-toggle .opt{

@@ -5,6 +5,7 @@ import type { CorePanelState, CostMode, JarvisConfig, PanelState } from "@jarvis
 import { packageDir } from "./lib/env.js";
 import { HudServer } from "./server.js";
 import { buildCaccPanel, buildMomentumPanel, buildTopPanel } from "./registry.js";
+import { VoiceOrchestrator } from "./voice/orchestrator.js";
 
 function loadConfig(): JarvisConfig {
   const p = process.env.JARVIS_CONFIG ?? path.join(packageDir, "jarvis.config.json");
@@ -20,8 +21,7 @@ function loadConfig(): JarvisConfig {
 const config = loadConfig();
 const pollMs = (config.pollSeconds ?? 60) * 1000;
 
-// Voice pipeline is Phase 3; until then the core panel reports idle + the
-// current cost mode (free by default — never silently pro).
+// Free by default — never silently pro (ARCHITECTURE.md §6).
 const coreState: CorePanelState = { voiceStatus: "idle", mode: "free" };
 
 const server = new HudServer(config.ws?.port ?? DEFAULT_WS_PORT, (mode: CostMode) => {
@@ -33,6 +33,20 @@ const server = new HudServer(config.ws?.port ?? DEFAULT_WS_PORT, (mode: CostMode
 function publishCore(): void {
   server.publish({ panel: "core", state: { ...coreState } });
 }
+
+const voice = new VoiceOrchestrator(config.voice, {
+  getPanelState: (panel) => server.getState(panel),
+  setMode: (mode) => {
+    coreState.mode = mode;
+    console.log(`[core] mode → ${mode} (voice)`);
+  },
+  onVoiceChange: (status, lastRoute, pipeline) => {
+    coreState.voiceStatus = status;
+    if (lastRoute) coreState.lastRoute = lastRoute;
+    if (pipeline) coreState.pipeline = pipeline;
+    publishCore();
+  },
+});
 
 const PANEL_BUILDERS: Array<() => Promise<PanelState>> = [
   async () => ({ panel: "left", state: await buildCaccPanel() }),
@@ -57,6 +71,7 @@ async function pollOnce(): Promise<void> {
 }
 
 publishCore();
+voice.start();
 void pollOnce();
 setInterval(() => void pollOnce(), pollMs);
 console.log(`[core] polling every ${pollMs / 1000}s`);

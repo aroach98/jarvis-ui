@@ -44,6 +44,11 @@ export class HudServer {
     });
   }
 
+  /** Latest published state for a panel (voice answers read from this cache). */
+  getState(panel: PanelId): PanelState | undefined {
+    return this.last.get(panel);
+  }
+
   publish(state: PanelState): void {
     this.last.set(state.panel, state);
     const msg: ServerMessage = { type: "panel-state", ts: new Date().toISOString(), ...state };

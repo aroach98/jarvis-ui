@@ -93,6 +93,27 @@ export function CorePanel(): JSX.Element {
               : 'wake phrase armed · "Jarvis"'}
           </div>
 
+          {state.pipeline && (
+            <div className="pipeline-chips">
+              {(
+                [
+                  ["wake", state.pipeline.wake],
+                  ["stt", state.pipeline.stt],
+                  ["nlu", state.pipeline.nlu],
+                  ["tts", state.pipeline.tts],
+                ] as const
+              ).map(([label, status]) => (
+                <span
+                  key={label}
+                  className={`chip ${status.connected ? "ok" : "queued"}`}
+                  title={status.reason ?? ""}
+                >
+                  {label}
+                </span>
+              ))}
+            </div>
+          )}
+
           <div className="mode-toggle">
             <button
               type="button"

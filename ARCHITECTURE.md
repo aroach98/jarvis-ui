@@ -124,22 +124,34 @@ v1 subagents only *report*; v2 stretch goal is letting a subagent also emit UI d
 "generative UI" pattern real HUD/JARVIS design writeups converge on, deferred until the
 static version is proven out.
 
-## 4. Voice pipeline
+## 4. Voice pipeline (Phase 3 — built 2026-08-14, free mode)
 
-- **Wake word**: always-on local wake-word detector (openWakeWord — free, open source,
-  matches the free-mode philosophy) listening for "Jarvis", plus a distinct trained
-  phrase for "Good morning Jarvis" (see §5).
-- **STT**: your existing **Murmur** app. Murmur today is hold-to-dictate-into-focused-window
-  only (see `murmur-project` memory); jarvis-core needs Murmur's Whisper.net pipeline
-  exposed as a small local service (HTTP or named pipe) it can call after wake-word
-  trigger, instead of typing into a focused window. That's a scoped addition to Murmur,
-  not a fork — tracked as an open build item, not assumed to exist yet.
-- **TTS**: two tiers, switchable live (§6). We will **not** attempt to literally clone a
-  film character's voice — that's a personality-rights/IP problem for a public repo.
-  Instead pick/tune a voice with similar qualities (calm, precise, slightly formal).
-- **NLU/reasoning**: Claude Agent SDK in pro mode; a small local model (via your Ollama
-  box, see `local-ai-coding-3060` memory) in free mode for intent classification and
-  canned responses.
+- **Wake word**: a small Python **sidecar** (`apps/jarvis-core/sidecar/`) owns the
+  microphone: openWakeWord's pretrained **"hey jarvis"** model → on trigger it POSTs
+  `/voice/wake` to jarvis-core, records the utterance (energy endpointing), and ships
+  the WAV to `/voice/utterance`. jarvis-core autostarts it (config `voice.sidecar`)
+  and shows a wake chip from its heartbeat. *Deviation from the original §1 sketch:*
+  the sidecar owns mic capture, not jarvis-shell — openWakeWord is Python, and giving
+  the detector the mic directly beats streaming PCM through Electron. A distinct
+  trained "Good morning Jarvis" phrase is still Phase 4 (§5).
+- **STT**: **Murmur server mode** (shipped in the Murmur repo, 2026-08-14): the tray
+  app serves its Whisper.net pipeline at `http://127.0.0.1:8722` (`GET /health`,
+  `POST /transcribe` WAV → text), loopback only; `Murmur --server` runs it headless.
+  jarvis-core's `src/voice/stt.ts` is the client.
+- **NLU/routing** (`src/voice/nlu.ts`): deterministic rules catch the canned intents
+  (inbox / checks / crm / tasks / mode toggle) with zero model calls; everything else
+  goes to the local Ollama box (default `huihui_ai/qwen2.5-coder-abliterate:14b` at
+  192.168.1.62:11434) — classification first, and free-form answers grounded in a
+  context block built from cached panel state only. Claude Agent SDK reasoning is the
+  pro path, Phase 4.
+- **Answers** (`src/voice/answers.ts`): canned intents are answered deterministically
+  from cached panel state — no model, no API, no fabrication; disconnected connectors
+  are said out loud.
+- **TTS** (`src/voice/tts.ts`): free tier = Windows SAPI (local, $0), voice/rate
+  configurable. Cloud TTS is Phase 4; we will **not** literally clone a film
+  character's voice — personality-rights/IP problem for a public repo.
+- Every stage reports health (`CorePanelState.pipeline`) and the core panel renders
+  wake/stt/nlu/tts chips; a dead stage degrades that chip, never the HUD.
 
 ## 5. "Good morning Jarvis" briefing
 
@@ -194,8 +206,8 @@ data.
 
 ## 8. Open build items (not yet solved, called out on purpose)
 
-- Murmur needs a "server mode" to serve STT to jarvis-core instead of typing into a
-  focused window.
+- ~~Murmur needs a "server mode" to serve STT to jarvis-core~~ — shipped in the Murmur
+  repo 2026-08-14 (loopback HTTP, tray-hosted + `--server` headless).
 - Token-usage subagent needs an actual spend-tracking source — Claude API usage isn't
   currently metered anywhere per-world; this needs a small ledger, not scraping.
 - `agents` schema (ex-opsdeck) has no per-repo/per-org filter today — `cacc-fleet` and

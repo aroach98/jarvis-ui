@@ -14,3 +14,4 @@ Thumbs.db
 *.local.json
 jarvis.config.json
 !jarvis.config.example.json
+.venv/

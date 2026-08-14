@@ -124,9 +124,26 @@ export interface MomentumPanelState {
 export type CoreVoiceStatus = "idle" | "listening" | "routing" | "speaking";
 export type CostMode = "free" | "pro";
 
+/**
+ * Health of each voice-pipeline stage (Phase 3), same honesty contract as
+ * data connectors: a stage that isn't running reports why instead of the
+ * panel pretending voice works.
+ */
+export interface VoicePipelineStatus {
+  /** Wake-word sidecar (openWakeWord, "hey jarvis"). */
+  wake: ConnectorStatus;
+  /** Murmur server-mode STT. */
+  stt: ConnectorStatus;
+  /** Intent routing — Ollama in free mode. */
+  nlu: ConnectorStatus;
+  /** Local TTS voice. */
+  tts: ConnectorStatus;
+}
+
 export interface CorePanelState {
   voiceStatus: CoreVoiceStatus;
   mode: CostMode;
+  pipeline?: VoicePipelineStatus;
   lastRoute?: {
     subagent: string;
     utterance: string;
@@ -218,6 +235,31 @@ export interface JarvisConfig {
   };
   /** Baseline panel refresh interval (ARCHITECTURE.md §2). Default 60. */
   pollSeconds?: number;
+  /** Phase 3 voice pipeline. Everything has a sane localhost default. */
+  voice?: {
+    /** Murmur server-mode STT endpoint. Default http://127.0.0.1:8722. */
+    murmurUrl?: string;
+    /** jarvis-core's own voice-event listener (sidecar → core). Default 8723. */
+    eventsPort?: number;
+    ollama?: {
+      /** Default http://192.168.1.62:11434 (the 3060 box). */
+      url?: string;
+      /** Default huihui_ai/qwen2.5-coder-abliterate:14b. */
+      model?: string;
+    };
+    tts?: {
+      /** Installed SAPI voice name substring, e.g. "Zira". Default: system default. */
+      voice?: string;
+      /** SAPI rate -10..10. Default 0. */
+      rate?: number;
+    };
+    sidecar?: {
+      /** Spawn the wake-word sidecar automatically. Default true. */
+      autostart?: boolean;
+      /** Python executable for the sidecar venv. Default: sidecar/.venv python. */
+      python?: string;
+    };
+  };
 }
 
 /** Used by both apps when jarvis.config.json is absent or omits ws.port. */

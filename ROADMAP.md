@@ -23,11 +23,18 @@ fabricated data) — see `CLAUDE.md` for current state:
 - [x] Known-blocked, interface built, data honestly absent: `cacc-fleet`,
   `momentum-fleet`, `momentum-comms`, `subscriptions-usage`
 
-## Phase 3 — Voice, free mode only
-- Wake word ("Jarvis") via openWakeWord
-- Murmur server-mode STT integration
-- Local TTS, local-model routing/intent classification
-- Basic voice queries answered from cached panel state
+## Phase 3 — Voice, free mode only — done (2026-08-14)
+- [x] Wake word via openWakeWord — Python sidecar owning the mic; pretrained
+  **"hey jarvis"** phrase (a custom bare-"Jarvis" model would need training — Phase 4
+  alongside "Good morning Jarvis")
+- [x] Murmur server-mode STT integration (server mode shipped in the Murmur repo;
+  jarvis-core is a plain HTTP client)
+- [x] Local TTS (Windows SAPI), local-model routing/intent classification (rules
+  first, Ollama 14b fallback + free-form answers grounded in cached state)
+- [x] Basic voice queries answered from cached panel state ("what's in my inbox",
+  checks, pipeline, taskers, "go premium"/"save mode")
+- Verified end-to-end with synthetic WAVs injected at the sidecar boundary; live-mic
+  wake-word tuning on the real desk is the remaining human test
 
 ## Phase 4 — Pro mode + briefing
 - Claude Agent SDK reasoning path, free/pro toggle wired end to end

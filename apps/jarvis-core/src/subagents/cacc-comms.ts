@@ -17,7 +17,7 @@ export async function fetchCaccInbox(): Promise<CaccPanelState["inbox"]> {
     const [folder, messages, flaggedCount] = await Promise.all([
       graphGet<{ unreadItemCount: number }>("/me/mailFolders/inbox?$select=unreadItemCount"),
       graphGet<{ value: GraphMessage[] }>(
-        "/me/mailFolders/inbox/messages?$top=20&$orderby=receivedDateTime desc" +
+        "/me/mailFolders/inbox/messages?$top=40&$orderby=receivedDateTime desc" +
           "&$select=from,subject,receivedDateTime,isRead,importance,flag",
       ),
       graphGet<{ "@odata.count"?: number }>(
@@ -30,7 +30,7 @@ export async function fetchCaccInbox(): Promise<CaccPanelState["inbox"]> {
       m.flag?.flagStatus === "flagged" || m.importance === "high";
     const items: InboxItem[] = messages.value
       .filter((m) => !m.isRead || isUrgent(m))
-      .slice(0, 5)
+      .slice(0, 12)
       .map((m) => ({
         from: m.from?.emailAddress?.name ?? m.from?.emailAddress?.address ?? "(unknown)",
         subject: m.subject ?? "(no subject)",

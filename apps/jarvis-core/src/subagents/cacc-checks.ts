@@ -115,15 +115,13 @@ export async function fetchCaccChecks(): Promise<CaccPanelState["checks"]> {
       { site: "vercel", label: err.message, verdict: "failed" as CheckVerdict },
     ]);
 
-    // Problems first; healthy rows collapse into one summary line so the
-    // panel doesn't scroll 20 deep when the fleet is green.
+    // Problems first, then the healthy rows — the portrait panel has room
+    // for the whole fleet, so show it rather than collapsing to a summary.
     const all = [...gateItems, ...deployItems, ...suiteItems];
-    const bad = all.filter((i) => i.verdict !== "ok");
-    const good = all.filter((i) => i.verdict === "ok");
-    const items =
-      good.length > 3
-        ? [...bad, { site: `${good.length} checks`, label: "all green", verdict: "ok" as CheckVerdict }]
-        : [...bad, ...good];
+    const items = [
+      ...all.filter((i) => i.verdict !== "ok"),
+      ...all.filter((i) => i.verdict === "ok"),
+    ];
 
     return { connector: { connected: true }, items };
   } catch (err) {

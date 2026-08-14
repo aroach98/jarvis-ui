@@ -32,7 +32,7 @@ export async function fetchPersonalTasks(): Promise<TopPanelState["tasks"]> {
     const res = await fetch(
       `${url}/rest/v1/tasks?select=title,next_due,priority` +
         `&status=eq.active&next_due=not.is.null&next_due=lte.${horizon}` +
-        `&order=next_due.asc&limit=8`,
+        `&order=next_due.asc&limit=14`,
       {
         headers: {
           apikey: key,

@@ -22,7 +22,7 @@ export async function fetchMomentumCrm(): Promise<MomentumPanelState["crm"]> {
          left join mscrm.companies c on c.id = d.company_id
         where d.stage = any($1)
         order by d.updated_at desc
-        limit 10`,
+        limit 14`,
       [OPEN_STAGES],
     );
     return {

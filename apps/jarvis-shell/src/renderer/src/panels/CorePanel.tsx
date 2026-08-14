@@ -1,6 +1,6 @@
 import type { CoreVoiceStatus } from "@jarvis-ui/shared";
 import { useJarvisSocket } from "../useJarvisSocket";
-import { Awaiting, LinkBanner } from "../components";
+import { Awaiting, LinkBanner, ScanSweep } from "../components";
 
 const STATUS_LABEL: Record<CoreVoiceStatus, string> = {
   idle: "Standing by",
@@ -9,6 +9,58 @@ const STATUS_LABEL: Record<CoreVoiceStatus, string> = {
   speaking: "Speaking",
 };
 
+/**
+ * The arc reactor — layered SVG rings, several counter-rotating, always
+ * alive. Voice states (Phase 3) spin it faster and brighter via the
+ * .reactor2.<status> CSS modifiers.
+ */
+function Reactor({ status }: { status: CoreVoiceStatus }): JSX.Element {
+  return (
+    <div className={`reactor2 ${status}`}>
+      <svg viewBox="0 0 400 400" aria-hidden>
+        <defs>
+          <radialGradient id="coreGrad" cx="50%" cy="45%" r="60%">
+            <stop offset="0%" stopColor="#eafbff" />
+            <stop offset="38%" stopColor="#8fe6ff" />
+            <stop offset="70%" stopColor="#5fd8ff" />
+            <stop offset="100%" stopColor="#2f6b7d" />
+          </radialGradient>
+        </defs>
+
+        {/* outer tick ring */}
+        <g className="spin s90">
+          <circle cx="200" cy="200" r="192" fill="none" stroke="currentColor" strokeWidth="8" strokeDasharray="2 8.05" opacity="0.5" />
+        </g>
+        {/* cardinal marks (static) */}
+        <path d="M200 0v16M200 384v16M0 200h16M384 200h16" stroke="currentColor" strokeWidth="2" opacity="0.6" />
+
+        {/* long-arc ring */}
+        <g className="spin s45">
+          <circle cx="200" cy="200" r="176" fill="none" stroke="currentColor" strokeWidth="2" strokeDasharray="96 28" opacity="0.7" />
+        </g>
+        {/* heavy segmented ring, counter-rotating */}
+        <g className="spin rev20">
+          <circle cx="200" cy="200" r="152" fill="none" stroke="currentColor" strokeWidth="7" strokeDasharray="42 20" opacity="0.55" />
+        </g>
+        <circle cx="200" cy="200" r="134" fill="none" stroke="currentColor" strokeWidth="0.75" opacity="0.5" />
+
+        {/* rotor */}
+        <g className="spin s14">
+          <circle cx="200" cy="200" r="116" fill="none" stroke="currentColor" strokeWidth="16" strokeDasharray="50 24" opacity="0.4" />
+        </g>
+        {/* fast inner ring */}
+        <g className="spin s6">
+          <circle cx="200" cy="200" r="92" fill="none" stroke="currentColor" strokeWidth="3.5" strokeDasharray="11 8" opacity="0.85" />
+        </g>
+
+        <circle cx="200" cy="200" r="72" fill="none" stroke="currentColor" strokeWidth="1.25" opacity="0.7" />
+        <circle className="core-disc" cx="200" cy="200" r="56" fill="url(#coreGrad)" />
+      </svg>
+      <div className="halo" aria-hidden />
+    </div>
+  );
+}
+
 /** Bottom-middle (primary) — arc reactor, voice status, free/pro toggle. */
 export function CorePanel(): JSX.Element {
   const { state, linkUp, setMode } = useJarvisSocket("core");
@@ -16,6 +68,7 @@ export function CorePanel(): JSX.Element {
   return (
     <section className="panel core-panel">
       <div className="corner-br" />
+      <ScanSweep />
       <LinkBanner linkUp={linkUp} />
       <div className="panel-head">
         <div>
@@ -27,12 +80,11 @@ export function CorePanel(): JSX.Element {
         <Awaiting />
       ) : (
         <div className="panel-body">
-          <div className={`reactor${state.voiceStatus === "idle" ? " dormant" : ""}`}>
-            <div className="ring r1" />
-            <div className="ring r2" />
-            <div className="ring r3" />
-            <div className="ring r4" />
-            <div className="core" />
+          <Reactor status={state.voiceStatus} />
+          <div className={`wave ${state.voiceStatus}`} aria-hidden>
+            {Array.from({ length: 24 }, (_, i) => (
+              <i key={i} style={{ "--i": i % 12 } as React.CSSProperties} />
+            ))}
           </div>
           <div className="core-status">{STATUS_LABEL[state.voiceStatus]}</div>
           <div className="core-substatus">
@@ -58,24 +110,26 @@ export function CorePanel(): JSX.Element {
             </button>
           </div>
 
-          <div className="route-line">
-            {state.lastRoute ? (
-              <>
-                last route → <b>{state.lastRoute.subagent}</b> · &quot;{state.lastRoute.utterance}
-                &quot; · {new Date(state.lastRoute.at).toLocaleTimeString("en-US", {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                  hour12: false,
-                })}
-              </>
-            ) : (
-              <>no routes yet — voice intent routing lands in Phase 3</>
-            )}
-          </div>
-
-          <div className="briefing-note">
-            <b>&quot;Good morning, Jarvis&quot;</b> starts AC/DC quietly, then a 3-line flash
-            briefing — CACC, Momentum, Today — 15 words or less each. (Phase 4.)
+          <div className="core-footer">
+            <div className="route-line">
+              {state.lastRoute ? (
+                <>
+                  last route → <b>{state.lastRoute.subagent}</b> · &quot;
+                  {state.lastRoute.utterance}&quot; ·{" "}
+                  {new Date(state.lastRoute.at).toLocaleTimeString("en-US", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    hour12: false,
+                  })}
+                </>
+              ) : (
+                <>no routes yet — voice intent routing lands in Phase 3</>
+              )}
+            </div>
+            <div className="briefing-note">
+              <b>&quot;Good morning, Jarvis&quot;</b> starts AC/DC quietly, then a 3-line flash
+              briefing — CACC, Momentum, Today — 15 words or less each. (Phase 4.)
+            </div>
           </div>
         </div>
       )}

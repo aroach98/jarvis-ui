@@ -1,5 +1,13 @@
 import { useJarvisSocket } from "../useJarvisSocket";
-import { Awaiting, LinkBanner, SectionOffline } from "../components";
+import {
+  Awaiting,
+  HexStream,
+  LinkBanner,
+  Reticle,
+  ScanSweep,
+  Section,
+  SectionOffline,
+} from "../components";
 
 /** Left display — everything CACC: inbox triage, fleet, checks & deploys. */
 export function LeftPanel(): JSX.Element {
@@ -8,6 +16,8 @@ export function LeftPanel(): JSX.Element {
   return (
     <section className="panel">
       <div className="corner-br" />
+      <ScanSweep />
+      <Reticle />
       <LinkBanner linkUp={linkUp} />
       <div className="panel-head">
         <div className="headline">
@@ -17,57 +27,64 @@ export function LeftPanel(): JSX.Element {
             <h2>CACC</h2>
           </div>
         </div>
-        {state && state.inbox.flagged > 0 && (
-          <span className="chip urgent">{state.inbox.flagged} flagged</span>
-        )}
+        <div className="head-right">
+          {state && state.inbox.flagged > 0 && (
+            <span className="chip urgent">{state.inbox.flagged} flagged</span>
+          )}
+          <HexStream />
+        </div>
       </div>
       {!state ? (
         <Awaiting />
       ) : (
         <div className="panel-body">
-          {!state.inbox.connector.connected ? (
-            <SectionOffline status={state.inbox.connector} />
-          ) : (
-            <>
-              <div className="count-banner">
-                <div>
-                  <div className="num">{state.inbox.unread}</div>
-                  <div className="lbl">unread</div>
+          <Section title="Inbox · andrew.roach@cacadets.org" grow={5}>
+            {!state.inbox.connector.connected ? (
+              <SectionOffline status={state.inbox.connector} />
+            ) : (
+              <>
+                <div className="count-banner">
+                  <div>
+                    <div className="num">{state.inbox.unread}</div>
+                    <div className="lbl">unread</div>
+                  </div>
+                  <div>
+                    <div className={state.inbox.flagged > 0 ? "num crit" : "num"}>
+                      {state.inbox.flagged}
+                    </div>
+                    <div className="lbl">flagged</div>
+                  </div>
                 </div>
                 <div>
-                  <div className={state.inbox.flagged > 0 ? "num crit" : "num"}>
-                    {state.inbox.flagged}
-                  </div>
-                  <div className="lbl">flagged</div>
+                  {state.inbox.items.map((m, i) => (
+                    <div className="inbox-item" key={i}>
+                      <div className="from">
+                        {m.from} <span className="time">{m.time}</span>
+                      </div>
+                      <div className="subj">
+                        {m.subject}
+                        {m.urgent && (
+                          <span className="chip urgent" style={{ marginLeft: 6 }}>
+                            urgent
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              </div>
-              <div>
-                {state.inbox.items.map((m, i) => (
-                  <div className="inbox-item" key={i}>
-                    <div className="from">
-                      {m.from} <span className="time">{m.time}</span>
-                    </div>
-                    <div className="subj">
-                      {m.subject}
-                      {m.urgent && (
-                        <span className="chip urgent" style={{ marginLeft: 6 }}>
-                          urgent
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
+              </>
+            )}
+          </Section>
 
-          <div>
-            <div className="section-label">
-              Fleet
-              {state.fleet.connector.connected && (
+          <Section
+            title="Fleet"
+            grow={2}
+            right={
+              state.fleet.connector.connected ? (
                 <span className="spend">${state.fleet.spendTodayUsd.toFixed(2)} today</span>
-              )}
-            </div>
+              ) : null
+            }
+          >
             {!state.fleet.connector.connected ? (
               <SectionOffline status={state.fleet.connector} />
             ) : (
@@ -81,10 +98,9 @@ export function LeftPanel(): JSX.Element {
                 </div>
               ))
             )}
-          </div>
+          </Section>
 
-          <div>
-            <div className="section-label">Checks &amp; deploys</div>
+          <Section title="Checks & deploys" grow={6}>
             {!state.checks.connector.connected ? (
               <SectionOffline status={state.checks.connector} />
             ) : (
@@ -95,7 +111,7 @@ export function LeftPanel(): JSX.Element {
                 </div>
               ))
             )}
-          </div>
+          </Section>
         </div>
       )}
     </section>

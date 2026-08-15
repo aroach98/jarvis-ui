@@ -1,16 +1,22 @@
-"""Wake-word sidecar for jarvis-core (Phase 3).
+"""Wake-word + push-to-talk sidecar for jarvis-core.
 
-Owns the microphone: listens for "hey jarvis" (openWakeWord pretrained model),
-records the utterance that follows (energy-based endpointing), and hands the
+Owns the microphone: listens for "hey jarvis" (openWakeWord pretrained model)
+AND for a hold-to-talk key (default F8) — both always active. Records the
+utterance (two-phase endpointing for wake; key-release for PTT) and hands the
 WAV to jarvis-core over localhost HTTP. Deliberately dumb — STT, routing, and
 TTS all live in jarvis-core.
 
 Events posted to --core (default http://127.0.0.1:8723):
   POST /voice/heartbeat  {"ok": bool, "reason": str}   every 15s
-  POST /voice/wake       (empty)                        on wake-word hit
+  POST /voice/wake       (empty)                        wake word or PTT press
   POST /voice/utterance  (audio/wav body)               after endpointing
 
-Test hook (no mic involved): --send-wav file.wav posts one utterance and exits.
+Utilities:
+  --list-devices        print input devices and exit
+  --device <n | name>   input device by index or case-insensitive name part
+  --threshold <0..1>    wake-word score threshold (default 0.5)
+  --ptt-key <key>       hold-to-talk key (default f8); "none" disables
+  --send-wav file.wav   post one utterance and exit (test hook, no mic)
 """
 
 import argparse
@@ -25,11 +31,13 @@ import wave
 RATE = 16000
 FRAME = 1280  # 80 ms — openWakeWord's expected step size
 WAKE_THRESHOLD = 0.5
+NEAR_MISS = 0.30
 SILENCE_RMS = 500
 SILENCE_SECONDS = 1.2
 WAIT_FOR_SPEECH_SECONDS = 5.0  # grace period after the wake word before giving up
 MAX_UTTERANCE_SECONDS = 12
 WAKE_COOLDOWN_SECONDS = 2.0
+MIN_PTT_SECONDS = 0.3
 
 
 def post(url: str, data: bytes = b"", content_type: str = "application/json") -> None:
@@ -73,40 +81,75 @@ def rms(frame) -> float:
     return float(np.sqrt(np.mean(samples * samples))) if samples.size else 0.0
 
 
-def listen(core: str, device, threshold: float, hb: Heartbeat) -> None:
-    import numpy as np
+def resolve_device(spec):
+    """None → system default; int-ish → index; else name substring (input devices)."""
+    import sounddevice as sd
+
+    devices = sd.query_devices()
+    if spec is None:
+        idx = sd.default.device[0]
+        return idx, devices[idx]["name"] if idx is not None and idx >= 0 else "system default"
+    try:
+        idx = int(spec)
+        return idx, devices[idx]["name"]
+    except ValueError:
+        pass
+    needle = spec.lower()
+    for i, d in enumerate(devices):
+        if d["max_input_channels"] > 0 and needle in d["name"].lower():
+            return i, d["name"]
+    raise SystemExit(f"no input device matching '{spec}' — try --list-devices")
+
+
+def send_utterance(core: str, pcm: bytes, label: str) -> None:
+    try:
+        post(f"{core}/voice/utterance", wav_bytes(pcm), "audio/wav")
+        print(f"{label} utterance sent ({len(pcm) // 32} ms)")
+    except Exception as e:
+        print(f"utterance post failed: {e}", file=sys.stderr)
+
+
+def notify_wake(core: str) -> None:
+    try:
+        post(f"{core}/voice/wake")
+    except Exception as e:
+        print(f"core unreachable on wake: {e}", file=sys.stderr)
+
+
+def listen(core: str, device, threshold: float, ptt_key: str, hb: Heartbeat) -> None:
     import sounddevice as sd
     from openwakeword.model import Model
 
+    dev_index, dev_name = resolve_device(device)
     model = Model(wakeword_models=["hey_jarvis_v0.1"], inference_framework="onnx")
     wake_key = next(iter(model.models.keys()))
-    print(f"listening for wake word ({wake_key}), device={device if device is not None else 'default'}")
+
+    ptt = {"down": False}
+    if ptt_key and ptt_key.lower() != "none":
+        try:
+            import keyboard
+
+            keyboard.on_press_key(ptt_key, lambda e: ptt.__setitem__("down", True), suppress=False)
+            keyboard.on_release_key(ptt_key, lambda e: ptt.__setitem__("down", False), suppress=False)
+            print(f"push-to-talk armed: hold {ptt_key.upper()}")
+        except Exception as e:
+            print(f"push-to-talk unavailable: {e}", file=sys.stderr)
+
+    print(
+        f"listening for wake word ({wake_key}, threshold {threshold}) "
+        f"on mic [{dev_index}] {dev_name}"
+    )
 
     stream = sd.InputStream(
-        samplerate=RATE, channels=1, dtype="int16", blocksize=FRAME, device=device
+        samplerate=RATE, channels=1, dtype="int16", blocksize=FRAME, device=dev_index
     )
     stream.start()
-    hb.ok, hb.reason = True, ""
+    hb.ok, hb.reason = True, f"mic: {dev_name}"
     last_wake = 0.0
+    last_miss_log = 0.0
 
-    while True:
-        frame, _ = stream.read(FRAME)
-        mono = frame[:, 0]
-        scores = model.predict(mono)
-        if scores.get(wake_key, 0.0) < threshold or time.monotonic() - last_wake < WAKE_COOLDOWN_SECONDS:
-            continue
-
-        last_wake = time.monotonic()
-        print(f"wake ({scores[wake_key]:.2f}) — recording")
-        try:
-            post(f"{core}/voice/wake")
-        except Exception as e:
-            print(f"core unreachable on wake: {e}", file=sys.stderr)
-
-        # Two-phase endpointing: first WAIT for speech to begin (people pause
-        # after the wake word — the silence rule must not start counting until
-        # they've actually said something), then record until sustained
-        # silence or the cap.
+    def record_wake_utterance() -> bytes | None:
+        """Two-phase: wait for speech to begin, then endpoint on silence."""
         chunks: list[bytes] = []
         speech_started = False
         silent_for = 0.0
@@ -120,7 +163,7 @@ def listen(core: str, device, threshold: float, hb: Heartbeat) -> None:
                 if loud:
                     speech_started = True
                 elif time.monotonic() - started > WAIT_FOR_SPEECH_SECONDS:
-                    break  # they never spoke
+                    return None  # they never spoke
                 continue
             if loud:
                 silent_for = 0.0
@@ -128,26 +171,72 @@ def listen(core: str, device, threshold: float, hb: Heartbeat) -> None:
                 silent_for += FRAME / RATE
                 if silent_for >= SILENCE_SECONDS:
                     break
+        return b"".join(chunks) if speech_started else None
 
+    def record_ptt_utterance() -> bytes:
+        """Record while the key is held, plus a short tail."""
+        chunks: list[bytes] = []
+        started = time.monotonic()
+        while ptt["down"] and time.monotonic() - started < MAX_UTTERANCE_SECONDS * 2:
+            f2, _ = stream.read(FRAME)
+            chunks.append(f2[:, 0].tobytes())
+        for _ in range(4):  # ~0.3s tail so the last word isn't clipped
+            f2, _ = stream.read(FRAME)
+            chunks.append(f2[:, 0].tobytes())
+        return b"".join(chunks)
+
+    while True:
+        if ptt["down"]:
+            print("ptt: recording")
+            notify_wake(core)
+            pcm = record_ptt_utterance()
+            if len(pcm) >= int(MIN_PTT_SECONDS * RATE * 2):
+                send_utterance(core, pcm, "ptt")
+            else:
+                print("ptt too short — discarded")
+            model.reset()
+            continue
+
+        frame, _ = stream.read(FRAME)
+        mono = frame[:, 0]
+        scores = model.predict(mono)
+        score = scores.get(wake_key, 0.0)
+        if score >= NEAR_MISS and score < threshold and time.monotonic() - last_miss_log > 1.0:
+            last_miss_log = time.monotonic()
+            print(f"wake near-miss ({score:.2f} < {threshold}) — speak closer or lower threshold")
+        if score < threshold or time.monotonic() - last_wake < WAKE_COOLDOWN_SECONDS:
+            continue
+
+        last_wake = time.monotonic()
+        print(f"wake ({score:.2f}) — recording")
+        notify_wake(core)
+        pcm = record_wake_utterance()
         model.reset()
-        pcm = b"".join(chunks)
-        if not speech_started:
+        if pcm is None:
             print("no speech after wake — discarded")
             continue
-        try:
-            post(f"{core}/voice/utterance", wav_bytes(pcm), "audio/wav")
-            print(f"utterance sent ({len(pcm) // 32} ms)")
-        except Exception as e:
-            print(f"utterance post failed: {e}", file=sys.stderr)
+        send_utterance(core, pcm, "wake")
 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--core", default="http://127.0.0.1:8723")
-    ap.add_argument("--device", type=int, default=None, help="sounddevice input index")
+    ap.add_argument("--device", default=None, help="input index or name substring")
     ap.add_argument("--threshold", type=float, default=WAKE_THRESHOLD)
+    ap.add_argument("--ptt-key", default="f8", help="hold-to-talk key; 'none' disables")
+    ap.add_argument("--list-devices", action="store_true")
     ap.add_argument("--send-wav", help="post this WAV as one utterance and exit (test hook)")
     args = ap.parse_args()
+
+    if args.list_devices:
+        import sounddevice as sd
+
+        default_in = sd.default.device[0]
+        for i, d in enumerate(sd.query_devices()):
+            if d["max_input_channels"] > 0:
+                mark = "  <= default" if i == default_in else ""
+                print(f"[{i}] {d['name']}{mark}")
+        return 0
 
     if args.send_wav:
         with open(args.send_wav, "rb") as f:
@@ -159,7 +248,7 @@ def main() -> int:
     hb.start()
     while True:
         try:
-            listen(args.core, args.device, args.threshold, hb)
+            listen(args.core, args.device, args.threshold, args.ptt_key, hb)
         except Exception as e:
             hb.ok, hb.reason = False, f"mic/listen error: {e}"
             print(f"listen loop failed: {e} — retrying in 30s", file=sys.stderr)

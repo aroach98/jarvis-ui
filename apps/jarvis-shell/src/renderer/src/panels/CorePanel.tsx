@@ -89,7 +89,7 @@ export function CorePanel(): JSX.Element {
           <div className="core-status">{STATUS_LABEL[state.voiceStatus]}</div>
           <div className="core-substatus">
             {state.voiceStatus === "idle"
-              ? 'wake phrase armed · say "hey jarvis"'
+              ? 'say "hey jarvis" · or hold F8 to talk'
               : "at your service, sir"}
           </div>
 

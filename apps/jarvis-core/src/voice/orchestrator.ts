@@ -260,8 +260,14 @@ export class VoiceOrchestrator {
       };
       return;
     }
+    const args = ["-u", script, "--core", `http://127.0.0.1:${this.eventsPort}`];
+    if (this.sidecarCfg?.device) args.push("--device", this.sidecarCfg.device);
+    if (this.sidecarCfg?.wakeThreshold !== undefined) {
+      args.push("--threshold", String(this.sidecarCfg.wakeThreshold));
+    }
+    if (this.sidecarCfg?.pttKey) args.push("--ptt-key", this.sidecarCfg.pttKey);
     // -u: unbuffered — piped Python output never flushes otherwise.
-    this.sidecar = spawn(python, ["-u", script, "--core", `http://127.0.0.1:${this.eventsPort}`], {
+    this.sidecar = spawn(python, args, {
       cwd: sidecarDir,
       stdio: ["ignore", "pipe", "pipe"],
       env: { ...process.env, PYTHONUNBUFFERED: "1" },

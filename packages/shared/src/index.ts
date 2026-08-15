@@ -291,6 +291,17 @@ export interface JarvisConfig {
       autostart?: boolean;
       /** Python executable for the sidecar venv. Default: sidecar/.venv python. */
       python?: string;
+      /**
+       * Input device: index or case-insensitive name substring (e.g. "BRIO").
+       * Default: system default input — which on some machines is a silent
+       * line-in, so pin the real mic here. `wake_listener.py --list-devices`
+       * prints the options.
+       */
+      device?: string;
+      /** Wake-word score threshold 0..1. Default 0.5; lower = more sensitive. */
+      wakeThreshold?: number;
+      /** Hold-to-talk key (always active alongside the wake word). Default "f8"; "none" disables. */
+      pttKey?: string;
     };
   };
 }

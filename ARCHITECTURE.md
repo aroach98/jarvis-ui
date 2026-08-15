@@ -232,11 +232,11 @@ data.
 - ~~Voice choice for Pro-mode TTS~~ — defaulted to ElevenLabs' prebuilt
   "Daniel" (configurable via `ELEVENLABS_VOICE_ID`); do a listen-through when
   the key is filed.
-- **Pending personal credentials** (each fails closed until filed in
-  `apps/jarvis-core/.env.local`; none existed in the personal secrets sheet as
-  of 2026-08-14): `ANTHROPIC_API_KEY` (pro reasoning), `ELEVENLABS_API_KEY`
-  (pro voice), `SPOTIFY_CLIENT_ID/SECRET/REFRESH_TOKEN` (briefing music —
-  needs a one-time OAuth consent with playback scopes).
+- ~~Pending personal credentials~~ — all filed and verified live 2026-08-14
+  (`ANTHROPIC_API_KEY`, `ELEVENLABS_API_KEY`, `SPOTIFY_*` in the personal
+  secrets sheet + this machine's `.env.local`): pro-mode Claude reasoning,
+  the ElevenLabs voice, and the ducked-AC/DC briefing all exercised for real.
+  A new machine re-copies them from the sheet into `.env.local`.
 - ~~Multi-display config resolution needs real-world testing on the plus-shaped
   4-monitor arrangement~~ — done 2026-08-14: corner-based "topmost" misassigned the
   portrait flanks, fixed by comparing display centers (see §2); this machine's IDs are

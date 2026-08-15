@@ -281,6 +281,11 @@ export interface JarvisConfig {
       /** ElevenLabs voice id. Default: the prebuilt "Daniel" voice. */
       voiceId?: string;
     };
+    /** Briefing soundtrack — local audio files, preferred over Spotify. */
+    music?: {
+      /** Folder of audio files. Default: apps/jarvis-core/music. */
+      dir?: string;
+    };
     sidecar?: {
       /** Spawn the wake-word sidecar automatically. Default true. */
       autostart?: boolean;

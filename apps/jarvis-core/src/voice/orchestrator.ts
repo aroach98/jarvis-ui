@@ -19,6 +19,7 @@ import { ProNlu } from "./pro.js";
 import { SapiTts } from "./tts.js";
 import { ElevenTts } from "./eleven.js";
 import { SpotifyPlayer } from "./spotify.js";
+import { LocalMusicPlayer } from "./localmusic.js";
 import { answerFromState, contextForChat } from "./answers.js";
 import { buildBriefing } from "./briefing.js";
 
@@ -51,6 +52,7 @@ export class VoiceOrchestrator {
   private readonly sapi: SapiTts;
   private readonly eleven: ElevenTts;
   private readonly spotify = new SpotifyPlayer();
+  private readonly localMusic: LocalMusicPlayer;
   private readonly eventsPort: number;
   private readonly sidecarCfg: NonNullable<JarvisConfig["voice"]>["sidecar"];
   private server?: http.Server;
@@ -73,6 +75,7 @@ export class VoiceOrchestrator {
     this.proNlu = new ProNlu(voice?.pro?.model);
     this.sapi = new SapiTts(voice?.tts?.voice, voice?.tts?.rate ?? 0);
     this.eleven = new ElevenTts(voice?.cloudTts?.voiceId);
+    this.localMusic = new LocalMusicPlayer(voice?.music?.dir ?? path.join(packageDir, "music"));
     this.eventsPort = voice?.eventsPort ?? 8723;
     this.sidecarCfg = voice?.sidecar;
     this.pipeline = {
@@ -186,14 +189,20 @@ export class VoiceOrchestrator {
     }
   }
 
-  /** §5: ducked AC/DC (when Spotify is wired), then 3 lines ≤15 words each. */
+  /** §5: ducked music (local rotation first, Spotify fallback), then 3 lines. */
   private async runBriefing(utterance: string): Promise<void> {
     const route = { subagent: "briefing", utterance, at: new Date().toISOString() };
     this.hooks.onVoiceChange("speaking", route, this.pipeline);
-    const musicStarted = this.spotify.available() && (await this.spotify.startMusic());
+    let musicStarted = false;
+    if (this.localMusic.available()) {
+      musicStarted = this.localMusic.start();
+      if (musicStarted) console.log("[voice] music: local rotation started");
+    } else if (this.spotify.available()) {
+      musicStarted = await this.spotify.startMusic();
+    }
     if (musicStarted) {
       clearTimeout(this.musicTimer);
-      this.musicTimer = setTimeout(() => void this.spotify.stopMusic(), MUSIC_TIMEOUT_MS);
+      this.musicTimer = setTimeout(() => this.stopMusic(), MUSIC_TIMEOUT_MS);
     }
     const lines = buildBriefing(this.hooks.getPanelState);
     console.log(`[voice] briefing: ${lines.join(" | ")}`);
@@ -204,6 +213,7 @@ export class VoiceOrchestrator {
 
   private stopMusic(): void {
     clearTimeout(this.musicTimer);
+    this.localMusic.stop();
     void this.spotify.stopMusic();
   }
 

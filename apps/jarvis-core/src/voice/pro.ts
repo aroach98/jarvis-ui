@@ -63,8 +63,8 @@ export class ProNlu {
       "The DATA block below is the live state of the user's dashboards — " +
         "answer ONLY from it. If the data can't answer, say so plainly.\n" +
         `DATA:\n${context}\n\nUser: ${utterance}`,
-      PERSONA_PROMPT,
-      300,
+      PERSONA_PROMPT + " Do not include internal or system XML tags in your response.",
+      500,
     );
   }
 
@@ -79,6 +79,11 @@ export class ProNlu {
         model: this.model,
         max_tokens: maxTokens,
         ...(system ? { system } : {}),
+        // Voice answers are latency-sensitive one-liners: thinking disabled
+        // (permitted at effort low) keeps the whole max_tokens budget for
+        // text — with adaptive thinking on, a small budget can be consumed
+        // by thinking before any words arrive.
+        thinking: { type: "disabled" },
         output_config: { effort: "low" },
         betas: ["server-side-fallback-2026-07-01"],
         fallbacks: "default",

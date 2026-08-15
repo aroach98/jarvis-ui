@@ -15,3 +15,5 @@ Thumbs.db
 jarvis.config.json
 !jarvis.config.example.json
 .venv/
+apps/jarvis-core/music/*
+!apps/jarvis-core/music/README.md

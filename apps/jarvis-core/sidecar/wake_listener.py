@@ -27,7 +27,7 @@ FRAME = 1280  # 80 ms — openWakeWord's expected step size
 WAKE_THRESHOLD = 0.5
 SILENCE_RMS = 500
 SILENCE_SECONDS = 1.2
-MIN_UTTERANCE_SECONDS = 0.4
+WAIT_FOR_SPEECH_SECONDS = 5.0  # grace period after the wake word before giving up
 MAX_UTTERANCE_SECONDS = 12
 WAKE_COOLDOWN_SECONDS = 2.0
 
@@ -103,27 +103,36 @@ def listen(core: str, device, threshold: float, hb: Heartbeat) -> None:
         except Exception as e:
             print(f"core unreachable on wake: {e}", file=sys.stderr)
 
-        # Record until sustained silence (or the cap), then ship the WAV.
+        # Two-phase endpointing: first WAIT for speech to begin (people pause
+        # after the wake word — the silence rule must not start counting until
+        # they've actually said something), then record until sustained
+        # silence or the cap.
         chunks: list[bytes] = []
+        speech_started = False
         silent_for = 0.0
         started = time.monotonic()
         while time.monotonic() - started < MAX_UTTERANCE_SECONDS:
             f2, _ = stream.read(FRAME)
             raw = f2[:, 0].tobytes()
             chunks.append(raw)
-            if rms(raw) < SILENCE_RMS:
-                silent_for += FRAME / RATE
-                if silent_for >= SILENCE_SECONDS and time.monotonic() - started > (
-                    MIN_UTTERANCE_SECONDS + SILENCE_SECONDS
-                ):
-                    break
-            else:
+            loud = rms(raw) >= SILENCE_RMS
+            if not speech_started:
+                if loud:
+                    speech_started = True
+                elif time.monotonic() - started > WAIT_FOR_SPEECH_SECONDS:
+                    break  # they never spoke
+                continue
+            if loud:
                 silent_for = 0.0
+            else:
+                silent_for += FRAME / RATE
+                if silent_for >= SILENCE_SECONDS:
+                    break
 
         model.reset()
         pcm = b"".join(chunks)
-        if len(pcm) < int(MIN_UTTERANCE_SECONDS * RATE * 2):
-            print("nothing said — discarded")
+        if not speech_started:
+            print("no speech after wake — discarded")
             continue
         try:
             post(f"{core}/voice/utterance", wav_bytes(pcm), "audio/wav")

@@ -10,6 +10,13 @@ import { getEnv } from "../lib/env.js";
  */
 const DUCK_VOLUME = 15;
 
+interface SpotifyDevice {
+  id: string;
+  is_active: boolean;
+  type: string;
+  volume_percent: number;
+}
+
 export class SpotifyPlayer {
   private previousVolume: number | null = null;
 
@@ -21,20 +28,32 @@ export class SpotifyPlayer {
     );
   }
 
-  /** Start AC/DC at ducked volume on the active device. False = skipped. */
+  /**
+   * Start AC/DC at ducked volume. Prefers the active device; when Spotify is
+   * merely open but idle, playback is transferred to any available device.
+   * False = skipped (no credentials, no device at all, or an API error).
+   */
   async startMusic(): Promise<boolean> {
     try {
       const token = await this.accessToken();
       if (!token) return false;
 
-      const player = await this.api<{ device?: { id: string; volume_percent: number } }>(
-        token,
-        "GET",
-        "/me/player",
-      );
-      const device = player?.device;
+      let device = (
+        await this.api<{ device?: SpotifyDevice }>(token, "GET", "/me/player")
+      )?.device;
       if (!device) {
-        console.log("[voice] spotify: no active device — skipping music");
+        const all = await this.api<{ devices?: SpotifyDevice[] }>(
+          token,
+          "GET",
+          "/me/player/devices",
+        );
+        device =
+          all?.devices?.find((d) => d.is_active) ??
+          all?.devices?.find((d) => d.type === "Computer") ??
+          all?.devices?.[0];
+      }
+      if (!device) {
+        console.log("[voice] spotify: no device available (is Spotify open?) — skipping music");
         return false;
       }
       this.previousVolume = device.volume_percent;
@@ -45,8 +64,9 @@ export class SpotifyPlayer {
       const uri = search?.tracks?.items?.[0]?.uri;
       if (!uri) return false;
 
-      await this.api(token, "PUT", `/me/player/volume?volume_percent=${DUCK_VOLUME}`);
-      await this.api(token, "PUT", "/me/player/play", { uris: [uri] });
+      const dev = `device_id=${encodeURIComponent(device.id)}`;
+      await this.api(token, "PUT", `/me/player/volume?volume_percent=${DUCK_VOLUME}&${dev}`);
+      await this.api(token, "PUT", `/me/player/play?${dev}`, { uris: [uri] });
       return true;
     } catch (err) {
       console.warn(`[voice] spotify start failed: ${(err as Error).message}`);

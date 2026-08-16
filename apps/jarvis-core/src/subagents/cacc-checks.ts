@@ -17,6 +17,7 @@ interface RunRow {
   started_at: string;
   criticality: string;
   prod_url: string;
+  repo: string | null;
 }
 interface GateRow {
   site_id: string;
@@ -24,6 +25,11 @@ interface GateRow {
 }
 
 const STALE_DAYS = 7;
+
+/** testing.sites.repo is "Org/name"; AGENTS registers bare slugs. */
+function repoSlug(repo: string | null | undefined): string | undefined {
+  return repo ? repo.split("/").pop() : undefined;
+}
 
 function runVerdict(r: RunRow): { verdict: CheckVerdict; label: string } {
   const staleMs = Date.now() - Date.parse(r.started_at);
@@ -67,9 +73,19 @@ async function vercelDeployChecks(sites: RunRow[]): Promise<CheckItem[]> {
           site: `${s.site_id} · prod`,
           label: state === "READY" ? "deployed" : state.toLowerCase(),
           verdict,
+          siteId: s.site_id,
+          repoSlug: repoSlug(s.repo),
+          kind: "deploy" as const,
         };
       } catch (err) {
-        return { site: `${s.site_id} · prod`, label: (err as Error).message, verdict: "failed" };
+        return {
+          site: `${s.site_id} · prod`,
+          label: (err as Error).message,
+          verdict: "failed",
+          siteId: s.site_id,
+          repoSlug: repoSlug(s.repo),
+          kind: "deploy" as const,
+        };
       }
     }),
   );
@@ -88,7 +104,7 @@ export async function fetchCaccChecks(): Promise<CaccPanelState["checks"]> {
       false,
       `select distinct on (r.site_id)
               r.site_id, r.status, r.failed, r.waived, r.started_at,
-              s.criticality, s.prod_url
+              s.criticality, s.prod_url, s.repo
          from testing.runs r
          join testing.sites s on s.site_id = r.site_id
         where r.finished_at is not null and s.active
@@ -102,14 +118,25 @@ export async function fetchCaccChecks(): Promise<CaccPanelState["checks"]> {
         order by site_id, decided_at desc`,
     );
 
+    const siteRepo = new Map(runs.map((r) => [r.site_id, repoSlug(r.repo)]));
     const suiteItems: CheckItem[] = runs.map((r) => {
       const { verdict, label } = runVerdict(r);
-      return { site: `${r.site_id} · suite`, label, verdict };
+      return {
+        site: `${r.site_id} · suite`,
+        label,
+        verdict,
+        siteId: r.site_id,
+        repoSlug: repoSlug(r.repo),
+        kind: "suite" as const,
+      };
     });
     const gateItems: CheckItem[] = gates.map((g) => ({
       site: `${g.site_id} · gate`,
       label: g.decision.replace(/_/g, " "),
       verdict: GATE_VERDICT[g.decision] ?? "failed",
+      siteId: g.site_id,
+      repoSlug: siteRepo.get(g.site_id),
+      kind: "gate" as const,
     }));
     const deployItems = await vercelDeployChecks(runs).catch((err: Error) => [
       { site: "vercel", label: err.message, verdict: "failed" as CheckVerdict },

@@ -1,10 +1,11 @@
 import type { CaccPanelState, MomentumPanelState, TopPanelState } from "@jarvis-ui/shared";
 import { fetchCaccInbox } from "./subagents/cacc-comms.js";
 import { fetchCaccChecks } from "./subagents/cacc-checks.js";
+import { fetchCaccQueue } from "./subagents/cacc-queue.js";
+import { fetchCaccFleet } from "./subagents/cacc-fleet.js";
 import { fetchMomentumCrm } from "./subagents/momentum-crm.js";
 import { fetchPersonalTasks } from "./subagents/personal-tasks.js";
 import {
-  fetchCaccFleet,
   fetchMomentumFleet,
   fetchMomentumInbox,
   fetchSpendToday,
@@ -20,12 +21,13 @@ import {
  */
 
 export async function buildCaccPanel(): Promise<CaccPanelState> {
-  const [inbox, fleet, checks] = await Promise.all([
+  const [inbox, fleet, queue, checks] = await Promise.all([
     fetchCaccInbox(),
     fetchCaccFleet(),
+    fetchCaccQueue(),
     fetchCaccChecks(),
   ]);
-  return { inbox, fleet, checks };
+  return { inbox, fleet, queue, checks };
 }
 
 export async function buildMomentumPanel(): Promise<MomentumPanelState> {

@@ -19,11 +19,29 @@ export const PANEL_WORKSTREAM: Record<PanelId, string> = {
 // ---------------------------------------------------------------------------
 
 export interface InboxItem {
+  /** Graph message id — key for the mail-detail action. */
+  id: string;
   from: string;
   subject: string;
   /** Pre-formatted for display (e.g. "08:12", "Yesterday") — jarvis-core owns formatting. */
   time: string;
   urgent: boolean;
+  unread: boolean;
+  /** First ~line of the body (Graph bodyPreview), for the expanded list view. */
+  preview: string;
+}
+
+/** Full message detail, fetched on demand via the "mail-detail" action. */
+export interface MailDetail {
+  id: string;
+  from: string;
+  fromAddress: string;
+  to: string[];
+  subject: string;
+  /** Pre-formatted, e.g. "Sat 08:12" — jarvis-core owns formatting. */
+  receivedAt: string;
+  /** Plain-text body (Graph is asked for text, never HTML). */
+  body: string;
 }
 
 export type FleetRunStatus = "running" | "queued" | "failed" | "done";
@@ -31,6 +49,46 @@ export type FleetRunStatus = "running" | "queued" | "failed" | "done";
 export interface FleetRun {
   name: string;
   status: FleetRunStatus;
+}
+
+/**
+ * The AGENTS pipeline (agents.cacadets.org), mirrored 1:1 from that repo's
+ * web/index.html PIPELINE array — stage ids, labels, and per-stage tints.
+ * The HUD renders the same rail so tasks visibly flow through the stages.
+ */
+export const AGENT_PIPELINE = [
+  { id: "cloning", label: "clone", color: "#60a5fa" },
+  { id: "architecting", label: "design", color: "#a78bfa" },
+  { id: "contract push", label: "contract", color: "#22d3ee" },
+  { id: "setup worktree", label: "worktree", color: "#14b8a6" },
+  { id: "installing", label: "install", color: "#fb923c" },
+  { id: "coding", label: "code", color: "#0ea5e9" },
+  { id: "building", label: "build", color: "#fbbf24" },
+  { id: "pushing", label: "push", color: "#c084fc" },
+  { id: "pr-open", label: "PR open", color: "#cba6f7" },
+] as const;
+
+/** How a task renders on the rail — ported from agents' pipelineState(). */
+export type AgentTaskKind =
+  | "queued" // unmarked/fetched/deferred/retry — before the rail
+  | "active" // riding stage stageIdx
+  | "review" // needs_review — parked on the PR pip
+  | "done" // merged
+  | "deployed"
+  | "error"; // error / deploy_failed
+
+export interface AgentTask {
+  repo: string;
+  number: number;
+  title: string;
+  kind: AgentTaskKind;
+  /** Index into AGENT_PIPELINE when kind is active/review; -1 otherwise. */
+  stageIdx: number;
+  /** Display label: a stage label, or "merged" / "deployed ✓" / "errored" / …. */
+  stageLabel: string;
+  /** Pre-formatted elapsed/age, e.g. "4m" / "2h". */
+  elapsed: string;
+  host?: string;
 }
 
 /**
@@ -62,10 +120,61 @@ export interface SectionDirectives {
 
 export type CheckVerdict = "ok" | "waived" | "failed";
 
+export type CheckKind = "suite" | "gate" | "deploy";
+
 export interface CheckItem {
   site: string;
   label: string;
   verdict: CheckVerdict;
+  /** Proving Ground site_id — set when this row maps to a testing.sites row. */
+  siteId?: string;
+  /** AGENTS repo slug for "investigate" dispatch; absent = not dispatchable. */
+  repoSlug?: string;
+  kind?: CheckKind;
+}
+
+/**
+ * HQ portal bug-report / feature-request queue (hq.bug_reports /
+ * hq.feature_requests). jarvis-core mirrors HQ's own "open" semantics and
+ * dispatch rules — see src/subagents/cacc-queue.ts.
+ */
+export type QueueKind = "bug" | "feature";
+
+export interface QueueTicket {
+  kind: QueueKind;
+  /** hq row uuid. */
+  id: string;
+  system: string;
+  /** HQ status vocabulary (new | in_review | needs_info | building | planned | …). */
+  status: string;
+  /** AI triage summary when present, else the raw description/idea, one line. */
+  title: string;
+  submitter: string;
+  /** Pre-formatted age, e.g. "2d" — jarvis-core owns formatting. */
+  age: string;
+  /** Bugs only: triage severity (low|medium|high|critical). */
+  severity?: string;
+  /** Triage/design confidence 0..1 when triaged. */
+  confidence?: number;
+  /** Resolved AGENTS repo slug for this ticket's system; null = unroutable. */
+  repoSlug: string | null;
+  /** Whether jarvis can dispatch this ticket (triaged + routable + not yet dispatched). */
+  dispatchable: boolean;
+  /** Set once an AGENTS task exists for this ticket. */
+  agent?: {
+    taskId: string;
+    repo: string;
+    number?: number;
+    /** Live agents.tasks status (unmarked|…|done|deployed|error|deploy_failed). */
+    status?: string;
+  };
+  /** Full description/idea, for the expanded detail view. */
+  detail: string;
+  /** Triage extracts for the detail view. */
+  triage?: {
+    rootCause?: string;
+    proposedFix?: string;
+  };
 }
 
 export interface CaccPanelState {
@@ -80,7 +189,15 @@ export interface CaccPanelState {
     connector: ConnectorStatus;
     directives?: SectionDirectives;
     spendTodayUsd: number;
-    runs: FleetRun[];
+    /** Live + recent AGENTS pipeline tasks, newest activity first. */
+    tasks: AgentTask[];
+  };
+  queue: {
+    connector: ConnectorStatus;
+    directives?: SectionDirectives;
+    bugs: number;
+    features: number;
+    items: QueueTicket[];
   };
   checks: {
     connector: ConnectorStatus;
@@ -223,15 +340,59 @@ export type PanelState =
   | { panel: "core"; state: CorePanelState }
   | { panel: "top"; state: TopPanelState };
 
+/**
+ * Interactive actions (HUD → core). Request/response over the same socket:
+ * the client mints a request id, core answers with a matching action-result.
+ * Mutating actions (dispatch-*) also trigger an immediate re-poll so the
+ * panel state reflects the change without waiting a full cycle.
+ */
+export type ActionRequest =
+  /** Fetch one message's full detail for the expanded inbox view. */
+  | { kind: "mail-detail"; messageId: string }
+  /** File the ticket's triage/design onto the AGENTS pipeline (HQ semantics). */
+  | { kind: "dispatch-ticket"; ticket: QueueKind; ticketId: string }
+  /** File an AGENTS investigation task for a failing check row. */
+  | {
+      kind: "dispatch-check";
+      siteId: string;
+      repoSlug: string;
+      checkKind: CheckKind;
+      label: string;
+    };
+
+export interface ActionResult {
+  ok: boolean;
+  /** Human-readable outcome ("task #188 filed on cacc-hq") or failure reason. */
+  message?: string;
+  /** mail-detail payload. */
+  mail?: MailDetail;
+  /** dispatch-* payload. */
+  dispatched?: { taskId: string; number?: number; repo: string };
+}
+
 export type ServerMessage =
   | ({ type: "panel-state"; ts: string } & PanelState)
-  | { type: "hello"; ts: string };
+  | { type: "hello"; ts: string }
+  | ({ type: "action-result"; id: string } & ActionResult)
+  /** Embedded-terminal output (only sent to windows that term-attached). */
+  | { type: "term-data"; data: string }
+  | { type: "term-exit"; code: number };
 
 export type ClientMessage =
   /** Emitted by the core panel's manual toggle. Phase 1/2 only — voice-driven toggling is Phase 3. */
   | { type: "set-mode"; mode: CostMode }
   /** A window announces which panel it wants to receive updates for, right after connecting. */
-  | { type: "subscribe"; panel: PanelId };
+  | { type: "subscribe"; panel: PanelId }
+  /** Interactive request; core replies with action-result carrying the same id. */
+  | { type: "action"; id: string; action: ActionRequest }
+  /**
+   * Embedded terminal (the herdr client hosted by jarvis-core in a pty).
+   * term-attach subscribes this window to term-data and (re)spawns the pty
+   * if needed; input/resize flow back over the same socket.
+   */
+  | { type: "term-attach"; cols: number; rows: number }
+  | { type: "term-input"; data: string }
+  | { type: "term-resize"; cols: number; rows: number };
 
 // ---------------------------------------------------------------------------
 // jarvis.config.json

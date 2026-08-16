@@ -38,7 +38,7 @@ Still **known-blocked**, honestly stubbed in `src/subagents/stubs.ts`
 
 | Subagent | Why it's blocked |
 |---|---|
-| `cacc-fleet` / `momentum-fleet` | the `agents` schema (ex-opsdeck) has no per-GitHub-org filter yet |
+| `momentum-fleet` | no Momentum repos registered in the AGENTS pipeline yet (`cacc-fleet` went live 2026-08-16 reading the whole `agents` schema — an org filter only becomes needed once Momentum repos exist there) |
 | `momentum-comms` | no mailbox/address identified yet |
 | `subscriptions-usage` | usage.andrewroach.xyz's backend/API is unexplored — open that codebase before building, don't guess at its API |
 | token-spend ledger (Top panel spend + fleet spend slices) | no per-world spend ledger exists anywhere yet |
@@ -66,9 +66,29 @@ persona ("sir", composed diction — vernacular only, deliberately not a voice c
 `src/voice/persona.ts`). Generative-UI v1: subagents set
 `SectionDirectives.attention` and the renderer pulses that section.
 
-What remains is not phases but blockers: the four stubbed connectors (fleet org
-filter, Momentum mailbox, usage backend, spend ledger) and the pending credentials —
-all listed in ARCHITECTURE.md §8.
+**Interactive HUD shipped 2026-08-16 (ARCHITECTURE.md §9)** — the HUD stopped being
+read-only:
+- Every data section is condensed with a ⛶ expand → full-display overlay (Esc closes).
+  Inbox expands to a reader (previews → full Graph message body, fetched on demand via
+  the new `action` request/response WS messages).
+- New `cacc-queue` subagent + section: HQ bug/feature queues (`hq.bug_reports`/
+  `hq.feature_requests`) with per-ticket **dispatch to the AGENTS pipeline** (machine
+  token `AGENTS_INGEST_TOKEN` from the CACC vault). Dispatch mirrors cacc-hq's own
+  semantics — triage-blob task text, `agent_task_ref` write-back, **never writes
+  `status`** (HQ's cron owns transitions + reporter emails). Dispatched tickets show
+  the live agent status chip.
+- `cacc-fleet` is live: the AGENTS 9-stage pipeline rail (`AGENT_PIPELINE` in shared),
+  a 1:1 port of agents.cacadets.org's status reconciliation, tasks visibly flowing.
+- Checks & deploys moved to the right display (second WS subscription to the left
+  stream); failing rows get **▶ investigate** which files an AGENTS task against the
+  site's repo (`testing.sites.repo`).
+- The bottom of the left display embeds the **herdr terminal**: jarvis-core hosts a
+  pty (`@lydell/node-pty`) running the herdr client, streamed to xterm.js in HUD
+  colors. It is just another herdr attach — killing it loses nothing; never
+  `herdr server stop`.
+
+What remains is not phases but blockers: the three stubbed connectors (Momentum
+fleet/mailbox, usage backend, spend ledger) — all listed in ARCHITECTURE.md §8.
 
 ### Running it
 

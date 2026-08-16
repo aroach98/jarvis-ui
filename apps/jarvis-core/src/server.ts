@@ -1,11 +1,14 @@
 import { WebSocketServer, WebSocket } from "ws";
 import type {
+  ActionRequest,
+  ActionResult,
   ClientMessage,
   CostMode,
   PanelId,
   PanelState,
   ServerMessage,
 } from "@jarvis-ui/shared";
+import { TermHost } from "./term.js";
 
 /**
  * WS server per packages/shared's protocol: clients subscribe by panel id
@@ -16,8 +19,17 @@ export class HudServer {
   private readonly wss: WebSocketServer;
   private readonly subs = new Map<WebSocket, PanelId>();
   private readonly last = new Map<PanelId, PanelState>();
+  private readonly termSubs = new Set<WebSocket>();
+  private readonly term = new TermHost(
+    (data) => this.termBroadcast({ type: "term-data", data }),
+    (code) => this.termBroadcast({ type: "term-exit", code }),
+  );
 
-  constructor(port: number, onSetMode: (mode: CostMode) => void) {
+  constructor(
+    port: number,
+    onSetMode: (mode: CostMode) => void,
+    onAction: (action: ActionRequest) => Promise<ActionResult>,
+  ) {
     this.wss = new WebSocketServer({ host: "127.0.0.1", port });
     this.wss.on("listening", () => console.log(`[core] WS listening on 127.0.0.1:${port}`));
     this.wss.on("connection", (ws) => {
@@ -37,10 +49,36 @@ export class HudServer {
           }
         } else if (msg.type === "set-mode") {
           onSetMode(msg.mode);
+        } else if (msg.type === "action") {
+          const { id } = msg;
+          void onAction(msg.action)
+            .catch((err: Error): ActionResult => ({ ok: false, message: err.message }))
+            .then((result) => this.send(ws, { type: "action-result", id, ...result }));
+        } else if (msg.type === "term-attach") {
+          this.termSubs.add(ws);
+          try {
+            const replay = this.term.attach(msg.cols, msg.rows);
+            if (replay) this.send(ws, { type: "term-data", data: replay });
+          } catch (err) {
+            this.send(ws, {
+              type: "term-data",
+              data: `\r\n[jarvis] terminal failed: ${(err as Error).message}\r\n`,
+            });
+          }
+        } else if (msg.type === "term-input") {
+          this.term.write(msg.data);
+        } else if (msg.type === "term-resize") {
+          this.term.resize(msg.cols, msg.rows);
         }
       });
-      ws.on("close", () => this.subs.delete(ws));
-      ws.on("error", () => this.subs.delete(ws));
+      ws.on("close", () => {
+        this.subs.delete(ws);
+        this.termSubs.delete(ws);
+      });
+      ws.on("error", () => {
+        this.subs.delete(ws);
+        this.termSubs.delete(ws);
+      });
     });
   }
 
@@ -57,6 +95,10 @@ export class HudServer {
         ws.send(JSON.stringify(msg));
       }
     }
+  }
+
+  private termBroadcast(msg: ServerMessage): void {
+    for (const ws of this.termSubs) this.send(ws, msg);
   }
 
   private send(ws: WebSocket, msg: ServerMessage): void {

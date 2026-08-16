@@ -62,8 +62,8 @@ pin a specific display to a specific panel when the heuristic gets it wrong — 
 
 | Position | Panel | Subagent(s) | Content |
 |---|---|---|---|
-| **Left** | CACC | `cacc-comms`, `cacc-fleet`, `cacc-checks` | Inbox triage, CACC-scoped agent runs, test/deploy verdicts (Proving Ground gate, Vercel deploys), CACC's slice of today's token spend |
-| **Right** | Momentum | `momentum-comms`, `momentum-fleet`, `momentum-crm` | Inbox triage, Momentum-scoped agent runs, CRM pipeline (clients.momentumsystems.dev), Momentum's slice of today's token spend. Later: autonomous demo-outreach status to nearby businesses (v2, not designed yet) |
+| **Left** | CACC | `cacc-comms`, `cacc-queue`, `cacc-fleet`, + embedded terminal | Inbox triage (expandable to a full reader), HQ bug/feature triage queue with agent dispatch, the AGENTS pipeline rail, and the herdr terminal (see §9) |
+| **Right** | Momentum | `momentum-comms`, `momentum-fleet`, `momentum-crm`, + `cacc-checks` | Inbox triage, Momentum-scoped agent runs, CRM pipeline (clients.momentumsystems.dev). Also hosts CACC's checks & deploys board (relocated 2026-08-16 to free left-panel space; the data still belongs to the left panel's state stream — the right window opens a second subscription for it). Later: autonomous demo-outreach status (v2, not designed yet) |
 | **Bottom-middle** (primary) | Jarvis Core | voice/orchestrator | Arc-reactor voice visualizer, current intent being routed, cost-mode toggle, global status ticker |
 | **Top** | Subscriptions & Today — **partially decided** | `subscriptions-usage`, `personal-tasks` | Usage bars for every Claude subscription across all payers (usage.andrewroach.xyz), today's to-do list + taskers due (tracking.andrewroach.xyz), overall API spend across all worlds. Subscriptions section is locked in; the rest of the panel (to-do list vs. a broader personal snapshot) is still open — revisit before Phase 1 locks it in |
 
@@ -103,8 +103,9 @@ voice utterance → Jarvis (intent routing)
 
 Subagents, grouped by the panel they feed:
 - `cacc-comms` — Microsoft Graph read/draft/send on andrew.roach@cacadets.org (see `graph-mailbox-access` memory: draft by default, never auto-send without confirmation)
-- `cacc-fleet` — reads the `agents` schema (ex-opsdeck) filtered to California-Cadet-Corps-org repos
-- `cacc-checks` — test/deploy verdicts: Proving Ground gate (`testing` subdomain), Vercel deploy status across cacc-* sites
+- `cacc-fleet` — **live 2026-08-16**: reads `agents.tasks` + the `task_runs` live mirror and ports the AGENTS board's own `taskDisplayStatus()`/`pipelineState()` reconciliation, so the HUD's 9-stage rail (clone → design → contract → worktree → install → code → build → push → PR open, `AGENT_PIPELINE` in `packages/shared`) agrees with agents.cacadets.org. No org filter needed today — every registered repo is CACC; `momentum-fleet` stays blocked until Momentum repos are registered
+- `cacc-queue` — **live 2026-08-16**: HQ portal bug/feature queues (`hq.bug_reports` / `hq.feature_requests`), joined against `agents.tasks` for live status of dispatched tickets. Mirrors cacc-hq's own semantics: open-status lists, the system→repo `agentTargets` map (general/unknown → no repo, never a default), and dispatchable = AI-triaged + routable + not yet dispatched
+- `cacc-checks` — test/deploy verdicts: Proving Ground gate (`testing` subdomain), Vercel deploy status across cacc-* sites; rows carry `siteId`/`repoSlug` (from `testing.sites.repo`) so failures can be dispatched for investigation (§9)
 - `momentum-comms` — Momentum inbox triage; mailbox/address not yet identified, open item
 - `momentum-fleet` — reads the `agents` schema filtered to Momentum-Systems-Dev-org repos
 - `momentum-crm` — reads clients.momentumsystems.dev (`mscrm` schema) for pipeline stage
@@ -212,9 +213,10 @@ data.
   repo 2026-08-14 (loopback HTTP, tray-hosted + `--server` headless).
 - Token-usage subagent needs an actual spend-tracking source — Claude API usage isn't
   currently metered anywhere per-world; this needs a small ledger, not scraping.
-- `agents` schema (ex-opsdeck) has no per-repo/per-org filter today — `cacc-fleet` and
-  `momentum-fleet` both need one to split fleet runs by workstream instead of showing
-  everything on both panels.
+- ~~`agents` schema has no per-org filter~~ — moot for now: every registered repo is
+  CACC, so `cacc-fleet` reads the whole schema (live 2026-08-16). `momentum-fleet`
+  stays honestly blocked until Momentum repos are registered in AGENTS, at which point
+  a real org filter becomes necessary again.
 - Momentum inbox/mailbox for `momentum-comms` isn't identified yet (CACC has a known
   Graph mailbox; Momentum's equivalent needs to be picked).
 - Momentum panel's future "autonomous demo-outreach to nearby businesses" section is a
@@ -241,3 +243,46 @@ data.
   4-monitor arrangement~~ — done 2026-08-14: corner-based "topmost" misassigned the
   portrait flanks, fixed by comparing display centers (see §2); this machine's IDs are
   additionally pinned in its gitignored `jarvis.config.json`.
+
+## 9. Interactive HUD (built 2026-08-16)
+
+The HUD stopped being read-only. Three mechanisms, all riding the existing WS socket
+(`packages/shared` is the contract, as always):
+
+**Actions (request/response).** The renderer mints a request id and sends
+`{type:"action", id, action}`; jarvis-core answers with a matching `action-result`.
+Three actions exist:
+- `mail-detail` — fetches one Graph message's full plain-text body on demand (never in
+  the poll loop) for the inbox reader.
+- `dispatch-ticket` — files an HQ queue ticket onto the AGENTS pipeline. This mirrors
+  cacc-hq's own Send-to-agents route exactly: the task text is built from the `ai_triage`
+  blob (same line format), sent to `POST agents.cacadets.org/api/ingest/tasks` with the
+  machine token (CACC vault "CACC Core / Cross-app shared secrets" /
+  `AGENTS_INGEST_TOKEN`), and the write-back records `agent_task_ref` +
+  `agent_dispatched_at` (+ `agent_dispatch_mode='manual'` for bugs) — **deliberately
+  never `status`**. HQ's 5-minute agent-status cron owns status transitions and routes
+  them through its reporter-email funnel; writing status here would silently skip the
+  reporter's notification. Dedup: a ticket with an existing `agent_task_ref` refuses to
+  re-dispatch.
+- `dispatch-check` — files an investigation task against a failing suite/gate/deploy
+  row's repo (from `testing.sites.repo`), with context on where the signal came from and
+  an explicit "if it's environmental or another repo's fault, write that up instead of
+  guessing a fix" instruction.
+
+A successful dispatch triggers an immediate re-poll so the panels reflect the new state
+without waiting out the interval.
+
+**Overlays.** Every data section renders condensed by default and carries a ⛶ control
+that expands it across the whole display (Esc closes): the inbox becomes a full reader
+(list with previews → full message body), the HQ queue becomes a triage board (ticket
+detail, triage hypothesis/proposed fix, dispatch button), fleet and checks become
+full-fleet boards. This is how "see everything at once, then zoom" replaces the
+CACC/Momentum toggle idea.
+
+**The embedded terminal.** jarvis-core hosts a pty (`@lydell/node-pty`) running the
+**herdr client** — the TUI is only a renderer; the herdr *server* owns every pane's
+shell, so this is just another attach and killing/respawning it never touches sessions
+(same contract as the standalone window; never `herdr server stop`). Output streams over
+the socket (`term-data`, with a 200KB replay ring for reconnects), input/resize flow
+back, and xterm.js renders it in the left panel's bottom section with the HUD's ANSI
+palette. Only windows that sent `term-attach` receive terminal traffic.

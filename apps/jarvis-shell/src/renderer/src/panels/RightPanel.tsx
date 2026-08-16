@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useJarvisSocket } from "../useJarvisSocket";
 import {
   Awaiting,
@@ -8,10 +9,21 @@ import {
   Section,
   SectionOffline,
 } from "../components";
+import { ChecksCompact, ChecksOverlay } from "./sections/ChecksViews";
 
-/** Right display — everything Momentum: inbox, fleet, CRM pipeline. */
+type RightOverlay = "checks" | null;
+
+/**
+ * Right display — Momentum (inbox, fleet, CRM) plus the CACC checks &
+ * deploys board, relocated here so the left display has room for the HQ
+ * queue + terminal. Checks ride a second subscription to the left panel's
+ * state stream — CACC still owns that data.
+ */
 export function RightPanel(): JSX.Element {
   const { state, linkUp } = useJarvisSocket("right");
+  const cacc = useJarvisSocket("left");
+  const [overlay, setOverlay] = useState<RightOverlay>(null);
+  const checks = cacc.state?.checks;
 
   return (
     <section className="panel right">
@@ -119,12 +131,24 @@ export function RightPanel(): JSX.Element {
             )}
           </Section>
 
-          <Section title="Outreach · Phase 2" grow={1}>
-            <div className="outreach-note">
-              <b>Not built yet:</b> autonomous demo-send status to nearby businesses —
-              queued / sent / replied counts land here once the outreach system exists.
-            </div>
+          <Section
+            title="CACC · checks & deploys"
+            grow={4}
+            attention={checks?.directives?.attention}
+            onExpand={() => setOverlay("checks")}
+          >
+            {!checks ? (
+              <Awaiting />
+            ) : !checks.connector.connected ? (
+              <SectionOffline status={checks.connector} />
+            ) : (
+              <ChecksCompact checks={checks} request={cacc.request} />
+            )}
           </Section>
+
+          {overlay === "checks" && checks && (
+            <ChecksOverlay checks={checks} request={cacc.request} onClose={() => setOverlay(null)} />
+          )}
         </div>
       )}
     </section>

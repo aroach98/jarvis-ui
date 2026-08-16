@@ -3,6 +3,7 @@ import path from "node:path";
 import { DEFAULT_WS_PORT } from "@jarvis-ui/shared";
 import type { CorePanelState, CostMode, JarvisConfig, PanelState } from "@jarvis-ui/shared";
 import { packageDir } from "./lib/env.js";
+import { handleAction, isMutating } from "./actions.js";
 import { HudServer } from "./server.js";
 import { buildCaccPanel, buildMomentumPanel, buildTopPanel } from "./registry.js";
 import { VoiceOrchestrator } from "./voice/orchestrator.js";
@@ -24,11 +25,24 @@ const pollMs = (config.pollSeconds ?? 60) * 1000;
 // Free by default — never silently pro (ARCHITECTURE.md §6).
 const coreState: CorePanelState = { voiceStatus: "idle", mode: "free" };
 
-const server = new HudServer(config.ws?.port ?? DEFAULT_WS_PORT, (mode: CostMode) => {
-  coreState.mode = mode;
-  console.log(`[core] mode → ${mode}`);
-  publishCore();
-});
+const server = new HudServer(
+  config.ws?.port ?? DEFAULT_WS_PORT,
+  (mode: CostMode) => {
+    coreState.mode = mode;
+    console.log(`[core] mode → ${mode}`);
+    publishCore();
+  },
+  async (action) => {
+    const result = await handleAction(action);
+    console.log(
+      `[core] action ${action.kind} → ${result.ok ? "ok" : "FAIL"}${result.message ? `: ${result.message}` : ""}`,
+    );
+    // A successful dispatch changed upstream state — refresh the panels now
+    // instead of waiting out the poll interval.
+    if (result.ok && isMutating(action)) void pollOnce();
+    return result;
+  },
+);
 
 function publishCore(): void {
   server.publish({ panel: "core", state: { ...coreState } });

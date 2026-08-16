@@ -1,23 +1,15 @@
-import type { CaccPanelState, MomentumPanelState, TopPanelState } from "@jarvis-ui/shared";
+import type { MomentumPanelState, TopPanelState } from "@jarvis-ui/shared";
 
 /**
- * The four known-blocked subagents (ARCHITECTURE.md §8, CLAUDE.md). Each
+ * The known-blocked subagents (ARCHITECTURE.md §8, CLAUDE.md). Each
  * returns an honest connected:false with the reason the UI should show —
  * never fabricated data. Promote one to its own module when its blocker
- * clears.
+ * clears (cacc-fleet graduated to cacc-fleet.ts 2026-08-16).
  */
-
-export async function fetchCaccFleet(): Promise<CaccPanelState["fleet"]> {
-  return {
-    connector: { connected: false, reason: "agents schema has no org filter yet" },
-    spendTodayUsd: 0,
-    runs: [],
-  };
-}
 
 export async function fetchMomentumFleet(): Promise<MomentumPanelState["fleet"]> {
   return {
-    connector: { connected: false, reason: "agents schema has no org filter yet" },
+    connector: { connected: false, reason: "no Momentum repos registered in the AGENTS pipeline yet" },
     spendTodayUsd: 0,
     runs: [],
   };

@@ -30,6 +30,7 @@ export function Section({
   right,
   grow = 1,
   attention = false,
+  onExpand,
   children,
 }: {
   title: string;
@@ -37,6 +38,8 @@ export function Section({
   grow?: number;
   /** Generative-UI directive: the owning subagent flagged this section. */
   attention?: boolean;
+  /** When set, the header grows an expand control opening the full-panel view. */
+  onExpand?: () => void;
   children: React.ReactNode;
 }): JSX.Element {
   return (
@@ -44,11 +47,86 @@ export function Section({
       <Reticle className="section-reticle" />
       <div className="section-head">
         <span className="section-title">{title}</span>
-        {right}
+        <span className="section-head-right">
+          {right}
+          {onExpand && (
+            <button type="button" className="expand-btn" onClick={onExpand} title="expand">
+              ⛶
+            </button>
+          )}
+        </span>
       </div>
       <div className="flow-line" aria-hidden />
       <div className="section-content">{children}</div>
     </div>
+  );
+}
+
+/**
+ * Full-panel takeover: pushes the sections aside (covers them) to give one
+ * dataset the entire display, HUD-framed. Esc or ✕ closes.
+ */
+export function Overlay({
+  title,
+  onClose,
+  right,
+  children,
+}: {
+  title: string;
+  onClose: () => void;
+  right?: JSX.Element | string | null;
+  children: React.ReactNode;
+}): JSX.Element {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  return (
+    <div className="overlay">
+      <div className="overlay-head">
+        <span className="overlay-title">{title}</span>
+        <span className="overlay-head-right">
+          {right}
+          <button type="button" className="expand-btn close" onClick={onClose} title="close (esc)">
+            ✕
+          </button>
+        </span>
+      </div>
+      <div className="flow-line" aria-hidden />
+      <div className="overlay-body">{children}</div>
+    </div>
+  );
+}
+
+/** HUD-styled action button with a busy state. */
+export function HudButton({
+  onClick,
+  busy = false,
+  disabled = false,
+  tone = "accent",
+  children,
+}: {
+  onClick: () => void;
+  busy?: boolean;
+  disabled?: boolean;
+  tone?: "accent" | "danger";
+  children: React.ReactNode;
+}): JSX.Element {
+  return (
+    <button
+      type="button"
+      className={`hud-btn ${tone}${busy ? " busy" : ""}`}
+      disabled={disabled || busy}
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
+    >
+      {busy ? "…" : children}
+    </button>
   );
 }
 

@@ -13,6 +13,14 @@ export function inboxTime(iso: string): string {
   return d.toLocaleDateString("en-US", { weekday: "short", month: "numeric", day: "numeric" });
 }
 
+/** Compact age since an ISO timestamp: "12m", "3h", "2d". */
+export function ageLabel(iso: string): string {
+  const mins = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 60_000));
+  if (mins < 60) return `${mins}m`;
+  if (mins < 48 * 60) return `${Math.round(mins / 60)}h`;
+  return `${Math.round(mins / 1440)}d`;
+}
+
 /**
  * Task due labels on the tracking app's own semantics: plain UTC YYYY-MM-DD
  * date strings, "today" boundary at 00:00 UTC (see tracking src/lib/recur.ts).

@@ -19,6 +19,16 @@ function loadConfig(): JarvisConfig {
   }
 }
 
+// Last-resort guards: log with a stack instead of dying silently. A native
+// crash can still kill the process without reaching these, so start-core.cmd
+// additionally wraps the whole thing in a restart loop.
+process.on("uncaughtException", (err) => {
+  console.error(`[core] UNCAUGHT: ${err.stack ?? err.message}`);
+});
+process.on("unhandledRejection", (reason) => {
+  console.error(`[core] UNHANDLED REJECTION: ${(reason as Error)?.stack ?? String(reason)}`);
+});
+
 const config = loadConfig();
 const pollMs = (config.pollSeconds ?? 60) * 1000;
 

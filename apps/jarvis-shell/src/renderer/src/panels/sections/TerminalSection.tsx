@@ -62,15 +62,24 @@ export function TerminalSection({
     const fit = new FitAddon();
     xt.loadAddon(fit);
     xt.open(host);
-    fit.fit();
     xtermRef.current = xt;
 
-    term.attach(xt.cols, xt.rows);
+    // Mid-layout (fullscreen transition, hidden section) the host can be
+    // 0-sized and fit() yields NaN cols/rows — never fit then, and never
+    // send non-finite dimensions to the pty (a NaN ConPTY resize is a
+    // native crash in jarvis-core).
+    const goodDims = (): boolean => Number.isFinite(xt.cols) && Number.isFinite(xt.rows) && xt.cols >= 2 && xt.rows >= 2;
+    const safeFit = (): void => {
+      if (host.clientWidth > 40 && host.clientHeight > 40) fit.fit();
+    };
+    safeFit();
+
+    term.attach(goodDims() ? xt.cols : 80, goodDims() ? xt.rows : 24);
     const offData = term.onData((d) => xt.write(d));
     const onInput = xt.onData((d) => term.input(d));
     const ro = new ResizeObserver(() => {
-      fit.fit();
-      term.resize(xt.cols, xt.rows);
+      safeFit();
+      if (goodDims()) term.resize(xt.cols, xt.rows);
     });
     ro.observe(host);
 

@@ -20,13 +20,26 @@ export class TermHost {
     this.onExit = onExit;
   }
 
+  /**
+   * Wire values arrive from a window mid-layout, where xterm's fit addon can
+   * yield NaN/0 — and Math.max(20, NaN) is NaN, which ConPTY answers with a
+   * NATIVE crash (no JS stack; this took the whole core down 2026-08-16).
+   * Sanitize hard and never let a pty call escape.
+   */
+  private static dim(v: number, min: number, max: number, fallback: number): number {
+    if (!Number.isFinite(v) || v < min) return fallback;
+    return Math.min(max, Math.floor(v));
+  }
+
   /** Spawn (or reuse) the pty; returns the replay buffer for the new client. */
   attach(cols: number, rows: number): string {
+    const c = TermHost.dim(cols, 20, 500, 80);
+    const r = TermHost.dim(rows, 5, 300, 24);
     if (!this.pty) {
       const pty = spawn("herdr.exe", [], {
         name: "xterm-256color",
-        cols: Math.max(20, cols),
-        rows: Math.max(5, rows),
+        cols: c,
+        rows: r,
         cwd: os.homedir(),
         env: process.env as Record<string, string>,
       });
@@ -40,18 +53,28 @@ export class TermHost {
         this.pty = null;
         this.onExit(exitCode);
       });
-      console.log(`[core] terminal: spawned herdr client (pid ${pty.pid})`);
+      console.log(`[core] terminal: spawned herdr client (pid ${pty.pid}, ${c}x${r})`);
     } else {
-      this.pty.resize(Math.max(20, cols), Math.max(5, rows));
+      this.resize(c, r);
     }
     return this.ring;
   }
 
   write(data: string): void {
-    this.pty?.write(data);
+    try {
+      this.pty?.write(data);
+    } catch (err) {
+      console.warn(`[core] terminal write failed: ${(err as Error).message}`);
+    }
   }
 
   resize(cols: number, rows: number): void {
-    this.pty?.resize(Math.max(20, cols), Math.max(5, rows));
+    const c = TermHost.dim(cols, 20, 500, 80);
+    const r = TermHost.dim(rows, 5, 300, 24);
+    try {
+      this.pty?.resize(c, r);
+    } catch (err) {
+      console.warn(`[core] terminal resize(${cols},${rows}) failed: ${(err as Error).message}`);
+    }
   }
 }

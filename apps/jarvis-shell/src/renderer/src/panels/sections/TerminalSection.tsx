@@ -11,13 +11,19 @@ import type { TermChannel } from "../../useJarvisSocket";
  * TUI renders in JARVIS colors. Click to focus and type exactly like the
  * standalone window.
  */
+/**
+ * Deep-blue arc-reactor glass, not a black rectangle: the default background
+ * is a translucent navy so the .term-wrap cyan glow shows through, and the
+ * ANSI black slots (which the herdr TUI uses for its dark fills) are shifted
+ * to blue-navy tones so the whole TUI reads JARVIS, not stock-terminal.
+ */
 const HUD_THEME = {
-  background: "#070c0f",
+  background: "rgba(7, 20, 32, 0.68)",
   foreground: "#d9eef4",
   cursor: "#5fd8ff",
   cursorAccent: "#05080a",
   selectionBackground: "rgba(95,216,255,0.28)",
-  black: "#0a1114",
+  black: "#0d2032",
   red: "#ff6b6b",
   green: "#57e6a1",
   yellow: "#f2a94e",
@@ -25,7 +31,7 @@ const HUD_THEME = {
   magenta: "#c084fc",
   cyan: "#22d3ee",
   white: "#d9eef4",
-  brightBlack: "#3f545a",
+  brightBlack: "#48708c",
   brightRed: "#ff8f8f",
   brightGreen: "#7cf0bd",
   brightYellow: "#f7c380",

@@ -277,6 +277,12 @@ export interface VoicePipelineStatus {
 export interface CorePanelState {
   voiceStatus: CoreVoiceStatus;
   mode: CostMode;
+  /**
+   * Jarvis-only mute: the wake sidecar closes ITS mic stream (the device
+   * stays available to every other app). Hold-to-talk still works while
+   * muted — a held key is explicit intent, unlike an always-hot wake word.
+   */
+  muted: boolean;
   pipeline?: VoicePipelineStatus;
   lastRoute?: {
     subagent: string;
@@ -381,6 +387,8 @@ export type ServerMessage =
 export type ClientMessage =
   /** Emitted by the core panel's manual toggle. Phase 1/2 only — voice-driven toggling is Phase 3. */
   | { type: "set-mode"; mode: CostMode }
+  /** Core panel's mic toggle — mutes Jarvis's wake listener only, never the device. */
+  | { type: "set-muted"; muted: boolean }
   /** A window announces which panel it wants to receive updates for, right after connecting. */
   | { type: "subscribe"; panel: PanelId }
   /** Interactive request; core replies with action-result carrying the same id. */

@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { DEFAULT_WS_PORT } from "@jarvis-ui/shared";
 import type { CorePanelState, CostMode, JarvisConfig, PanelState } from "@jarvis-ui/shared";
@@ -32,8 +32,26 @@ process.on("unhandledRejection", (reason) => {
 const config = loadConfig();
 const pollMs = (config.pollSeconds ?? 60) * 1000;
 
+// Mute survives restarts (unlike mode): a muted mic silently going hot again
+// after the supervisor loop restarts core would defeat the point of muting.
+const STATE_PATH = path.join(packageDir, ".jarvis-state.json");
+function loadMuted(): boolean {
+  try {
+    return (JSON.parse(readFileSync(STATE_PATH, "utf8")) as { muted?: boolean }).muted === true;
+  } catch {
+    return false;
+  }
+}
+function saveMuted(muted: boolean): void {
+  try {
+    writeFileSync(STATE_PATH, JSON.stringify({ muted }));
+  } catch (err) {
+    console.warn(`[core] could not persist mute state: ${(err as Error).message}`);
+  }
+}
+
 // Free by default — never silently pro (ARCHITECTURE.md §6).
-const coreState: CorePanelState = { voiceStatus: "idle", mode: "free" };
+const coreState: CorePanelState = { voiceStatus: "idle", mode: "free", muted: loadMuted() };
 
 const server = new HudServer(
   config.ws?.port ?? DEFAULT_WS_PORT,
@@ -52,6 +70,13 @@ const server = new HudServer(
     if (result.ok && isMutating(action)) void pollOnce();
     return result;
   },
+  (muted: boolean) => {
+    coreState.muted = muted;
+    saveMuted(muted);
+    voice.noteMuteChanged();
+    console.log(`[core] mic ${muted ? "MUTED (wake listener released)" : "live"}`);
+    publishCore();
+  },
 );
 
 function publishCore(): void {
@@ -61,6 +86,7 @@ function publishCore(): void {
 const voice = new VoiceOrchestrator(config.voice, {
   getPanelState: (panel) => server.getState(panel),
   getMode: () => coreState.mode,
+  getMuted: () => coreState.muted,
   setMode: (mode) => {
     coreState.mode = mode;
     console.log(`[core] mode → ${mode} (voice)`);

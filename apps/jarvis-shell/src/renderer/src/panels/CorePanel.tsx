@@ -61,9 +61,9 @@ function Reactor({ status }: { status: CoreVoiceStatus }): JSX.Element {
   );
 }
 
-/** Bottom-middle (primary) — arc reactor, voice status, free/pro toggle. */
+/** Bottom-middle (primary) — arc reactor, voice status, mute, free/pro toggle. */
 export function CorePanel(): JSX.Element {
-  const { state, linkUp, setMode } = useJarvisSocket("core");
+  const { state, linkUp, setMode, setMuted } = useJarvisSocket("core");
 
   return (
     <section className="panel core-panel">
@@ -80,18 +80,31 @@ export function CorePanel(): JSX.Element {
         <Awaiting />
       ) : (
         <div className="panel-body">
-          <Reactor status={state.voiceStatus} />
-          <div className={`wave ${state.voiceStatus}`} aria-hidden>
+          <Reactor status={state.muted ? "idle" : state.voiceStatus} />
+          <div className={`wave ${state.muted ? "muted" : state.voiceStatus}`} aria-hidden>
             {Array.from({ length: 24 }, (_, i) => (
               <i key={i} style={{ "--i": i % 12 } as React.CSSProperties} />
             ))}
           </div>
-          <div className="core-status">{STATUS_LABEL[state.voiceStatus]}</div>
-          <div className="core-substatus">
-            {state.voiceStatus === "idle"
-              ? 'say "hey jarvis" · or hold F8 to talk'
-              : "at your service, sir"}
+          <div className={`core-status${state.muted ? " muted" : ""}`}>
+            {state.muted ? "Muted" : STATUS_LABEL[state.voiceStatus]}
           </div>
+          <div className="core-substatus">
+            {state.muted
+              ? "wake word off · mic released · hold F8 to talk"
+              : state.voiceStatus === "idle"
+                ? 'say "hey jarvis" · or hold F8 to talk'
+                : "at your service, sir"}
+          </div>
+
+          <button
+            type="button"
+            className={`mute-btn${state.muted ? " muted" : ""}`}
+            onClick={() => setMuted(!state.muted)}
+            title="mutes Jarvis's wake listener only — the mic stays available to every other app"
+          >
+            {state.muted ? "🔇 muted — click to listen" : "🎙 listening — click to mute"}
+          </button>
 
           {state.pipeline && (
             <div className="pipeline-chips">

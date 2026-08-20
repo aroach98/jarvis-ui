@@ -346,7 +346,19 @@ body{
 .reactor2.speaking .halo{ animation-duration: 0.9s; }
 
 .core-status{ font-family: var(--font-label); letter-spacing: 0.22em; font-size: 2.1rem; color: var(--cyan); text-transform: uppercase; }
+.core-status.muted{ color: var(--crit); }
 .core-substatus{ font-size: 1.2rem; color: var(--text-dim); }
+
+.mute-btn{
+  background: rgba(95,216,255,0.08); border: 1px solid var(--accent-dim); color: var(--cyan);
+  font-family: var(--font-label); font-size: 1.15rem; letter-spacing: 0.12em;
+  text-transform: uppercase; padding: 0.7rem 1.8rem; cursor: pointer; border-radius: 2px;
+}
+.mute-btn:hover{ border-color: var(--cyan); background: rgba(95,216,255,0.16); }
+.mute-btn.muted{
+  color: var(--crit); border-color: rgba(255,107,107,0.55); background: rgba(255,107,107,0.1);
+}
+.mute-btn.muted:hover{ border-color: var(--crit); background: rgba(255,107,107,0.18); }
 
 /* voice waveform — amplitude tracks voice state, not fabricated data */
 .wave{ display: flex; align-items: center; gap: 0.4rem; height: 2.6rem; }
@@ -357,6 +369,7 @@ body{
   animation-delay: calc(var(--i) * 0.13s);
 }
 .wave.idle i{ animation-duration: 3.6s; opacity: 0.3; }
+.wave.muted i{ animation: none; transform: scaleY(0.12); opacity: 0.2; background: var(--crit); }
 .wave.speaking i, .wave.listening i{ animation-duration: 0.9s; opacity: 0.95; }
 .wave.routing i{ animation-duration: 1.6s; }
 

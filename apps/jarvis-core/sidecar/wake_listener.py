@@ -9,7 +9,12 @@ TTS all live in jarvis-core.
 Events posted to --core (default http://127.0.0.1:8723):
   POST /voice/heartbeat  {"ok": bool, "reason": str}   every 15s
   POST /voice/wake       (empty)                        wake word or PTT press
-  POST /voice/utterance  (audio/wav body)               after endpointing
+  POST /voice/utterance?src=wake|ptt  (audio/wav body)  after endpointing
+
+Mute (Jarvis-only, never the device): GET /voice/control is polled ~1s; while
+{"muted": true} the input stream is CLOSED — the mic is released back to the
+OS and nothing is captured. Hold-to-talk still works muted (explicit intent):
+a stream is opened just for the hold, then closed again.
 
 Utilities:
   --list-devices        print input devices and exit
@@ -45,6 +50,24 @@ def post(url: str, data: bytes = b"", content_type: str = "application/json") ->
     req.add_header("Content-Type", content_type)
     with urllib.request.urlopen(req, timeout=10):
         pass
+
+
+class ControlPoller(threading.Thread):
+    """Polls core for the Jarvis-only mute flag. Core down => keep last state."""
+
+    def __init__(self, core: str):
+        super().__init__(daemon=True)
+        self.core = core
+        self.muted = False
+
+    def run(self) -> None:
+        while True:
+            try:
+                with urllib.request.urlopen(f"{self.core}/voice/control", timeout=5) as r:
+                    self.muted = bool(json.loads(r.read()).get("muted", False))
+            except Exception:
+                pass
+            time.sleep(1)
 
 
 class Heartbeat(threading.Thread):
@@ -103,7 +126,7 @@ def resolve_device(spec):
 
 def send_utterance(core: str, pcm: bytes, label: str) -> None:
     try:
-        post(f"{core}/voice/utterance", wav_bytes(pcm), "audio/wav")
+        post(f"{core}/voice/utterance?src={label}", wav_bytes(pcm), "audio/wav")
         print(f"{label} utterance sent ({len(pcm) // 32} ms)")
     except Exception as e:
         print(f"utterance post failed: {e}", file=sys.stderr)
@@ -116,7 +139,7 @@ def notify_wake(core: str) -> None:
         print(f"core unreachable on wake: {e}", file=sys.stderr)
 
 
-def listen(core: str, device, threshold: float, ptt_key: str, hb: Heartbeat) -> None:
+def listen(core: str, device, threshold: float, ptt_key: str, hb: Heartbeat, ctl: ControlPoller) -> None:
     import sounddevice as sd
     from openwakeword.model import Model
 
@@ -140,13 +163,34 @@ def listen(core: str, device, threshold: float, ptt_key: str, hb: Heartbeat) -> 
         f"on mic [{dev_index}] {dev_name}"
     )
 
-    stream = sd.InputStream(
-        samplerate=RATE, channels=1, dtype="int16", blocksize=FRAME, device=dev_index
-    )
-    stream.start()
+    # The stream is opened/closed around mute so the device is genuinely
+    # released while muted (Jarvis-only — other apps see a free mic always).
+    mic = {"stream": None}
+
+    def open_mic():
+        if mic["stream"] is None:
+            s = sd.InputStream(
+                samplerate=RATE, channels=1, dtype="int16", blocksize=FRAME, device=dev_index
+            )
+            s.start()
+            mic["stream"] = s
+        return mic["stream"]
+
+    def close_mic() -> None:
+        s = mic["stream"]
+        if s is not None:
+            mic["stream"] = None
+            try:
+                s.stop()
+                s.close()
+            except Exception:
+                pass
+
+    open_mic()
     hb.ok, hb.reason = True, f"mic: {dev_name}"
     last_wake = 0.0
     last_miss_log = 0.0
+    announced_mute = False
 
     def record_wake_utterance() -> bytes | None:
         """Two-phase: wait for speech to begin, then endpoint on silence."""
@@ -155,7 +199,7 @@ def listen(core: str, device, threshold: float, ptt_key: str, hb: Heartbeat) -> 
         silent_for = 0.0
         started = time.monotonic()
         while time.monotonic() - started < MAX_UTTERANCE_SECONDS:
-            f2, _ = stream.read(FRAME)
+            f2, _ = mic["stream"].read(FRAME)
             raw = f2[:, 0].tobytes()
             chunks.append(raw)
             loud = rms(raw) >= SILENCE_RMS
@@ -178,14 +222,40 @@ def listen(core: str, device, threshold: float, ptt_key: str, hb: Heartbeat) -> 
         chunks: list[bytes] = []
         started = time.monotonic()
         while ptt["down"] and time.monotonic() - started < MAX_UTTERANCE_SECONDS * 2:
-            f2, _ = stream.read(FRAME)
+            f2, _ = mic["stream"].read(FRAME)
             chunks.append(f2[:, 0].tobytes())
         for _ in range(4):  # ~0.3s tail so the last word isn't clipped
-            f2, _ = stream.read(FRAME)
+            f2, _ = mic["stream"].read(FRAME)
             chunks.append(f2[:, 0].tobytes())
         return b"".join(chunks)
 
     while True:
+        if ctl.muted:
+            if mic["stream"] is not None and not ptt["down"]:
+                close_mic()
+                if not announced_mute:
+                    announced_mute = True
+                    print("muted — mic released (hold-to-talk still armed)")
+                hb.ok, hb.reason = True, "muted"
+            if ptt["down"]:
+                print("ptt (muted): recording")
+                open_mic()
+                notify_wake(core)
+                pcm = record_ptt_utterance()
+                close_mic()
+                if len(pcm) >= int(MIN_PTT_SECONDS * RATE * 2):
+                    send_utterance(core, pcm, "ptt")
+                else:
+                    print("ptt too short — discarded")
+            time.sleep(0.05)
+            continue
+        if mic["stream"] is None:
+            open_mic()
+            model.reset()
+            announced_mute = False
+            hb.ok, hb.reason = True, f"mic: {dev_name}"
+            print(f"unmuted — listening again on [{dev_index}] {dev_name}")
+
         if ptt["down"]:
             print("ptt: recording")
             notify_wake(core)
@@ -197,7 +267,7 @@ def listen(core: str, device, threshold: float, ptt_key: str, hb: Heartbeat) -> 
             model.reset()
             continue
 
-        frame, _ = stream.read(FRAME)
+        frame, _ = mic["stream"].read(FRAME)
         mono = frame[:, 0]
         scores = model.predict(mono)
         score = scores.get(wake_key, 0.0)
@@ -246,9 +316,11 @@ def main() -> int:
 
     hb = Heartbeat(args.core)
     hb.start()
+    ctl = ControlPoller(args.core)
+    ctl.start()
     while True:
         try:
-            listen(args.core, args.device, args.threshold, args.ptt_key, hb)
+            listen(args.core, args.device, args.threshold, args.ptt_key, hb, ctl)
         except Exception as e:
             hb.ok, hb.reason = False, f"mic/listen error: {e}"
             print(f"listen loop failed: {e} — retrying in 30s", file=sys.stderr)

@@ -29,6 +29,7 @@ export class HudServer {
     port: number,
     onSetMode: (mode: CostMode) => void,
     onAction: (action: ActionRequest) => Promise<ActionResult>,
+    onSetMuted: (muted: boolean) => void,
   ) {
     this.wss = new WebSocketServer({ host: "127.0.0.1", port });
     this.wss.on("listening", () => console.log(`[core] WS listening on 127.0.0.1:${port}`));
@@ -49,6 +50,8 @@ export class HudServer {
           }
         } else if (msg.type === "set-mode") {
           onSetMode(msg.mode);
+        } else if (msg.type === "set-muted") {
+          onSetMuted(msg.muted);
         } else if (msg.type === "action") {
           const { id } = msg;
           void onAction(msg.action)

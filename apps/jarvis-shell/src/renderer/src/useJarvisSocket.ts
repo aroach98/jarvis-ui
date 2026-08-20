@@ -25,6 +25,8 @@ export interface JarvisSocket<P extends PanelId> {
   /** WS connection to jarvis-core is up (independent of upstream connectors). */
   linkUp: boolean;
   setMode: (mode: CostMode) => void;
+  /** Jarvis-only mic mute — the wake sidecar releases its stream, PTT stays. */
+  setMuted: (muted: boolean) => void;
   /** Interactive request → core's action-result (never rejects; ok:false on failure). */
   request: (action: ActionRequest) => Promise<ActionResult>;
   /** Embedded-terminal channel (herdr client hosted by jarvis-core). */
@@ -108,6 +110,13 @@ export function useJarvisSocket<P extends PanelId>(panel: P): JarvisSocket<P> {
     }
   };
 
+  const setMuted = (muted: boolean): void => {
+    const ws = wsRef.current;
+    if (ws?.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: "set-muted", muted } satisfies ClientMessage));
+    }
+  };
+
   const request = useCallback((action: ActionRequest): Promise<ActionResult> => {
     const ws = wsRef.current;
     if (ws?.readyState !== WebSocket.OPEN) {
@@ -140,5 +149,5 @@ export function useJarvisSocket<P extends PanelId>(panel: P): JarvisSocket<P> {
     },
   };
 
-  return { state, linkUp, setMode, request, term };
+  return { state, linkUp, setMode, setMuted, request, term };
 }

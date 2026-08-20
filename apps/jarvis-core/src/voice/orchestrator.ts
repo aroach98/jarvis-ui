@@ -28,6 +28,8 @@ const MUSIC_TIMEOUT_MS = 10 * 60 * 1000;
 export interface OrchestratorHooks {
   getPanelState: (panel: PanelId) => PanelState | undefined;
   getMode: () => CostMode;
+  /** Jarvis-only mic mute (the sidecar polls it via GET /voice/control). */
+  getMuted: () => boolean;
   setMode: (mode: CostMode) => void;
   /** Push voiceStatus / lastRoute / pipeline changes to the core panel. */
   onVoiceChange: (
@@ -97,6 +99,11 @@ export class VoiceOrchestrator {
     return this.pipeline;
   }
 
+  /** Mute flipped — refresh the chips now instead of on the 30s cycle. */
+  noteMuteChanged(): void {
+    void this.refreshPipeline();
+  }
+
   /** Sidecar → core events: wake detected, utterance WAV, heartbeat. */
   private startEventServer(): void {
     this.server = http.createServer((req, res) => {
@@ -106,6 +113,10 @@ export class VoiceOrchestrator {
       };
       const url = req.url ?? "";
       if (req.method === "GET" && url === "/health") return done(200, { ok: true });
+      // The sidecar polls this ~1s and releases its mic stream while muted.
+      if (req.method === "GET" && url === "/voice/control") {
+        return done(200, { muted: this.hooks.getMuted() });
+      }
       if (req.method === "POST" && url === "/voice/heartbeat") {
         this.lastHeartbeat = Date.now();
         this.sidecarStatus = { connected: true };
@@ -125,13 +136,23 @@ export class VoiceOrchestrator {
         return;
       }
       if (req.method === "POST" && url === "/voice/wake") {
-        if (!this.busy) this.hooks.onVoiceChange("listening", undefined, this.pipeline);
+        if (!this.busy && !this.hooks.getMuted()) {
+          this.hooks.onVoiceChange("listening", undefined, this.pipeline);
+        }
         return done(200, { ok: true });
       }
-      if (req.method === "POST" && url === "/voice/utterance") {
+      if (req.method === "POST" && url.startsWith("/voice/utterance")) {
+        // Belt-and-braces mute: while muted only explicit push-to-talk
+        // utterances are accepted; anything wake-sourced is dropped even if
+        // a stale sidecar sent it.
+        const ptt = url.includes("src=ptt");
         collect(req, 16 * 1024 * 1024)
           .then((wav) => {
             done(202, { ok: true });
+            if (this.hooks.getMuted() && !ptt) {
+              console.log("[voice] muted — wake utterance discarded");
+              return;
+            }
             void this.handleUtterance(wav);
           })
           .catch(() => done(413, { ok: false }));
@@ -296,16 +317,14 @@ export class VoiceOrchestrator {
     // is always there beneath it as the fallback.
     const nlu: ConnectorStatus = pro ? this.proNlu.status() : freeNlu;
     const tts: ConnectorStatus = pro ? this.eleven.status() : this.sapi.status();
-    this.pipeline = {
-      wake: heartbeatFresh
+    const wake: ConnectorStatus = this.hooks.getMuted()
+      ? { connected: false, reason: "muted — mic released; hold F8 to talk" }
+      : heartbeatFresh
         ? this.sidecarStatus
         : this.sidecarStatus.connected
           ? { connected: false, reason: "sidecar heartbeat lost" }
-          : this.sidecarStatus,
-      stt,
-      nlu,
-      tts,
-    };
+          : this.sidecarStatus;
+    this.pipeline = { wake, stt, nlu, tts };
     this.hooks.onVoiceChange(this.busy ? "routing" : "idle", undefined, this.pipeline);
   }
 }

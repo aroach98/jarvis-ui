@@ -37,6 +37,23 @@ from pathlib import Path
 import numpy as np
 import soundfile as sf
 
+# faster-whisper (CTranslate2) wants cuDNN 8 while torch 2.8 ships cuDNN 9.
+# VoiceStudio's setup.py stages the 8.x DLLs in site-packages/cudnn8_compat and
+# its backend registers them at runtime (backend/core/cudnn8.py); do the same
+# here or WhisperModel dies with "Could not locate cudnn_ops_infer64_8.dll".
+_DLL_HANDLES: list[object] = []
+if sys.platform == "win32":
+    import os
+
+    for _lib in (
+        Path(sys.prefix) / "Lib" / "site-packages" / "cudnn8_compat" / "nvidia" / "cudnn" / "bin",
+        Path(sys.prefix) / "Lib" / "site-packages" / "nvidia" / "cudnn" / "bin",
+        Path(sys.prefix) / "Lib" / "site-packages" / "nvidia" / "cublas" / "bin",
+    ):
+        if _lib.is_dir():
+            _DLL_HANDLES.append(os.add_dll_directory(str(_lib)))
+            os.environ["PATH"] = f"{_lib}{os.pathsep}{os.environ.get('PATH', '')}"
+
 TEST_LINE = (
     "Good morning, sir. The workshop is at seventy two degrees, "
     "your inbox holds four flagged messages, and the suit is ready when you are."

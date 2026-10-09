@@ -238,36 +238,43 @@ def build_clips(stems_list, out: Path, args) -> list[dict]:
     return catalog
 
 
-def embed_clips(catalog: list[dict], out: Path, args) -> None:
-    import torch
-    from speechbrain.inference.speaker import EncoderClassifier
+_ENCODER = None
 
-    need = [c for c in catalog if "emb" not in c]
-    if not need:
-        return
-    log(f"embedding {len(need)} clips with ECAPA")
-    enc = EncoderClassifier.from_hparams(
-        source="speechbrain/spkrec-ecapa-voxceleb", savedir=str(out / "ecapa"), run_opts={"device": args.device},
-    )
-    for c in need:
-        x = load_mono(out / "clips" / c["file"], 16000)
-        with torch.no_grad():
-            e = enc.encode_batch(torch.from_numpy(x)[None, :]).squeeze().cpu().numpy()
-        c["emb"] = (e / (np.linalg.norm(e) + 1e-9)).round(5).tolist()
-    (out / "clips.json").write_text(json.dumps(catalog, indent=1))
+
+def ecapa(out: Path, device: str):
+    """speechbrain ECAPA speaker encoder, loaded once. COPY strategy: the
+    default symlinks the HF cache into savedir, which needs Developer Mode on
+    Windows and otherwise raises OSError (winerror 1314)."""
+    global _ENCODER
+    if _ENCODER is None:
+        from speechbrain.inference.speaker import EncoderClassifier
+        from speechbrain.utils.fetching import LocalStrategy
+
+        _ENCODER = EncoderClassifier.from_hparams(
+            source="speechbrain/spkrec-ecapa-voxceleb", savedir=str(out / "ecapa"),
+            run_opts={"device": device}, local_strategy=LocalStrategy.COPY,
+        )
+    return _ENCODER
 
 
 def embed_wav(path: Path, out: Path, device: str) -> np.ndarray:
     import torch
-    from speechbrain.inference.speaker import EncoderClassifier
 
-    enc = EncoderClassifier.from_hparams(
-        source="speechbrain/spkrec-ecapa-voxceleb", savedir=str(out / "ecapa"), run_opts={"device": device},
-    )
+    enc = ecapa(out, device)
     x = load_mono(path, 16000)
     with torch.no_grad():
         e = enc.encode_batch(torch.from_numpy(x)[None, :]).squeeze().cpu().numpy()
     return e / (np.linalg.norm(e) + 1e-9)
+
+
+def embed_clips(catalog: list[dict], out: Path, args) -> None:
+    need = [c for c in catalog if "emb" not in c]
+    if not need:
+        return
+    log(f"embedding {len(need)} clips with ECAPA")
+    for c in need:
+        c["emb"] = embed_wav(out / "clips" / c["file"], out, args.device).round(5).tolist()
+    (out / "clips.json").write_text(json.dumps(catalog, indent=1))
 
 
 def score_clips(catalog: list[dict], anchors: set[str], args) -> tuple[list[dict], np.ndarray]:

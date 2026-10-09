@@ -336,7 +336,11 @@ class VS:
         r.raise_for_status()
         while True:
             time.sleep(5)
-            st = self.c.get("/models/install/status").json()
+            try:
+                st = self.c.get("/models/install/status").json()
+            except Exception as exc:  # the backend blips while activating the model
+                log(f"  status poll retry: {exc}")
+                continue
             jobs = st.get("jobs", st if isinstance(st, list) else [])
             if any(j.get("state") == "failed" or j.get("status") == "failed" for j in jobs):
                 sys.exit(f"model install failed: {jobs}")
@@ -369,8 +373,16 @@ class VS:
 
     def speak(self, voice: str, text: str, engine: str, dest: Path) -> float:
         t0 = time.time()
-        r = self.c.post("/v1/audio/speech", json={"model": engine, "voice": voice, "input": text, "response_format": "wav"}, timeout=600)
-        r.raise_for_status()
+        for attempt in range(3):
+            try:
+                r = self.c.post("/v1/audio/speech", json={"model": engine, "voice": voice, "input": text, "response_format": "wav"}, timeout=600)
+                r.raise_for_status()
+                break
+            except Exception as exc:
+                if attempt == 2:
+                    raise
+                log(f"  speech retry ({exc})")
+                time.sleep(10)
         dest.write_bytes(r.content)
         return time.time() - t0
 

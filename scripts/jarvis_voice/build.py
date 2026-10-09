@@ -53,6 +53,16 @@ if sys.platform == "win32":
         if _lib.is_dir():
             _DLL_HANDLES.append(os.add_dll_directory(str(_lib)))
             os.environ["PATH"] = f"{_lib}{os.pathsep}{os.environ.get('PATH', '')}"
+            # Explicit preload too (what backend/core/cudnn8.py does): a DLL
+            # already in the process satisfies cuDNN's own LoadLibrary by name.
+            import ctypes
+            import glob as _glob
+
+            for _dll in sorted(_glob.glob(str(_lib / "cudnn*64_8.dll"))):
+                try:
+                    _DLL_HANDLES.append(ctypes.CDLL(_dll))
+                except OSError as exc:
+                    print(f"[voice-build] cudnn8 preload skipped {_dll}: {exc}", flush=True)
 
 TEST_LINE = (
     "Good morning, sir. The workshop is at seventy two degrees, "

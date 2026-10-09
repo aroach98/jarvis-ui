@@ -37,6 +37,15 @@ from pathlib import Path
 import numpy as np
 import soundfile as sf
 
+# Piped stdout on Windows defaults to the locale codepage, which cannot encode
+# the arrows/dashes below and would kill the run mid-stage (VoiceStudio's own
+# setup.py carries the same guard).
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass
+
 # faster-whisper (CTranslate2) wants cuDNN 8 while torch 2.8 ships cuDNN 9.
 # VoiceStudio's setup.py stages the 8.x DLLs in site-packages/cudnn8_compat and
 # its backend registers them at runtime (backend/core/cudnn8.py); do the same

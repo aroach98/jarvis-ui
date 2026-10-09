@@ -382,6 +382,7 @@ body{
 }
 .mode-toggle .opt.active.free{ background: rgba(95,216,255,0.12); color: var(--cyan); }
 .mode-toggle .opt.active.pro{ background: rgba(242,169,78,0.14); color: var(--amber); }
+.mode-note{ text-align:center; font-size:0.62rem; letter-spacing:0.08em; text-transform:uppercase; opacity:0.55; margin-top:-0.2rem; }
 
 .core-footer{
   width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 1.6rem;

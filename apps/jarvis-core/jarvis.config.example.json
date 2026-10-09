@@ -2,5 +2,13 @@
   "displayOverrides": {},
   "ws": {
     "port": 8721
+  },
+  "voice": {
+    "voicestudio": {
+      "url": "http://127.0.0.1:3900",
+      "profile": "JARVIS",
+      "dir": "C:\Users\<you>\VoiceStudio",
+      "autostart": true
+    }
   }
 }

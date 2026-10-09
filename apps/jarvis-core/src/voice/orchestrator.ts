@@ -17,7 +17,7 @@ import { FreeNlu } from "./nlu.js";
 import type { Intent } from "./nlu.js";
 import { ProNlu } from "./pro.js";
 import { SapiTts } from "./tts.js";
-import { ElevenTts } from "./eleven.js";
+import { VoiceStudioTts } from "./voicestudio.js";
 import { SpotifyPlayer } from "./spotify.js";
 import { LocalMusicPlayer } from "./localmusic.js";
 import { answerFromState, contextForChat } from "./answers.js";
@@ -41,18 +41,19 @@ export interface OrchestratorHooks {
 
 /**
  * The voice pipeline: wake-word sidecar → Murmur STT → intent routing →
- * answer → TTS. The free/pro cost toggle (ARCHITECTURE.md §6) selects the
- * reasoning and voice tiers per utterance — free = Ollama + SAPI ($0),
- * pro = Claude + ElevenLabs — and every pro resource fails closed to its
- * free counterpart rather than dropping the turn. Panel polling is always
- * free regardless of mode.
+ * answer → TTS. The free/pro cost toggle (ARCHITECTURE.md §6) selects only
+ * the REASONING tier per utterance — free = Ollama ($0), pro = Claude — and
+ * pro fails closed to free rather than dropping the turn. The voice itself is
+ * mode-independent: always the local VoiceStudio JARVIS clone ($0), with
+ * Windows SAPI as the fail-closed fallback while that backend is down.
+ * Panel polling is always free regardless of mode.
  */
 export class VoiceOrchestrator {
   private readonly stt: MurmurStt;
   private readonly freeNlu: FreeNlu;
   private readonly proNlu: ProNlu;
   private readonly sapi: SapiTts;
-  private readonly eleven: ElevenTts;
+  private readonly voice: VoiceStudioTts;
   private readonly spotify = new SpotifyPlayer();
   private readonly localMusic: LocalMusicPlayer;
   private readonly eventsPort: number;
@@ -76,7 +77,7 @@ export class VoiceOrchestrator {
     );
     this.proNlu = new ProNlu(voice?.pro?.model);
     this.sapi = new SapiTts(voice?.tts?.voice, voice?.tts?.rate ?? 0);
-    this.eleven = new ElevenTts(voice?.cloudTts?.voiceId);
+    this.voice = new VoiceStudioTts(voice?.voicestudio);
     this.localMusic = new LocalMusicPlayer(voice?.music?.dir ?? path.join(packageDir, "music"));
     this.eventsPort = voice?.eventsPort ?? 8723;
     this.sidecarCfg = voice?.sidecar;
@@ -84,14 +85,14 @@ export class VoiceOrchestrator {
       wake: this.sidecarStatus,
       stt: { connected: false, reason: "not checked yet" },
       nlu: { connected: false, reason: "not checked yet" },
-      tts: this.sapi.status(),
+      tts: this.voice.status(),
     };
   }
 
   start(): void {
     this.startEventServer();
     if (this.sidecarCfg?.autostart !== false) this.startSidecar();
-    void this.refreshPipeline();
+    void this.voice.start().then(() => this.refreshPipeline());
     setInterval(() => void this.refreshPipeline(), 30_000);
   }
 
@@ -256,14 +257,14 @@ export class VoiceOrchestrator {
     return this.freeNlu.chat(text, context);
   }
 
-  /** Mode-aware voice: pro tries ElevenLabs, failing closed to SAPI. */
+  /** The JARVIS clone in every mode; SAPI only while VoiceStudio is down. */
   private async speak(text: string): Promise<void> {
-    if (this.hooks.getMode() === "pro" && this.eleven.status().connected) {
+    if (this.voice.status().connected) {
       try {
-        await this.eleven.speak(text);
+        await this.voice.speak(text);
         return;
       } catch (err) {
-        console.warn(`[voice] cloud TTS failed, using SAPI: ${(err as Error).message}`);
+        console.warn(`[voice] VoiceStudio TTS failed, using SAPI: ${(err as Error).message}`);
       }
     }
     await this.sapi.speak(text);
@@ -311,12 +312,16 @@ export class VoiceOrchestrator {
 
   private async refreshPipeline(): Promise<void> {
     const heartbeatFresh = Date.now() - this.lastHeartbeat < 45_000;
-    const [stt, freeNlu] = await Promise.all([this.stt.health(), this.freeNlu.health()]);
+    const [stt, freeNlu, tts] = await Promise.all([
+      this.stt.health(),
+      this.freeNlu.health(),
+      this.voice.health(),
+    ]);
     const pro = this.hooks.getMode() === "pro";
-    // In pro mode the chips report the pro tier's own health; the free tier
-    // is always there beneath it as the fallback.
+    // In pro mode the nlu chip reports the pro tier's own health; the free
+    // tier is always there beneath it as the fallback. The tts chip is the
+    // VoiceStudio clone regardless of mode (SAPI is the silent fallback).
     const nlu: ConnectorStatus = pro ? this.proNlu.status() : freeNlu;
-    const tts: ConnectorStatus = pro ? this.eleven.status() : this.sapi.status();
     const wake: ConnectorStatus = this.hooks.getMuted()
       ? { connected: false, reason: "muted — mic released; hold F8 to talk" }
       : heartbeatFresh

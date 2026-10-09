@@ -268,9 +268,9 @@ export interface VoicePipelineStatus {
   wake: ConnectorStatus;
   /** Murmur server-mode STT. */
   stt: ConnectorStatus;
-  /** Intent routing — Ollama in free mode. */
+  /** Intent routing — Ollama in free mode, Claude in pro. */
   nlu: ConnectorStatus;
-  /** Local TTS voice. */
+  /** VoiceStudio JARVIS clone (every mode); SAPI is the silent fallback. */
   tts: ConnectorStatus;
 }
 
@@ -445,10 +445,24 @@ export interface JarvisConfig {
       /** Default claude-opus-5. */
       model?: string;
     };
-    /** Pro-mode cloud TTS (ElevenLabs). Key comes from .env.local. */
-    cloudTts?: {
-      /** ElevenLabs voice id. Default: the prebuilt "Daniel" voice. */
-      voiceId?: string;
+    /**
+     * The voice (every mode): a local VoiceStudio backend running the
+     * OmniVoice cloning engine, speaking through a saved voice profile. SAPI
+     * (`tts` above) is only the fail-closed fallback while it is down.
+     */
+    voicestudio?: {
+      /** Backend base URL. Default http://127.0.0.1:3900. */
+      url?: string;
+      /** Saved voice profile name or id to speak with. Default "JARVIS". */
+      profile?: string;
+      /** VoiceStudio engine id. Default "omnivoice". */
+      engine?: string;
+      /** VoiceStudio source checkout jarvis-core spawns. Default ~/VoiceStudio. */
+      dir?: string;
+      /** Spawn the backend when nothing answers on `url`. Default true. */
+      autostart?: boolean;
+      /** Playback speed multiplier passed to the engine. Default 1.0. */
+      speed?: number;
     };
     /** Briefing soundtrack — local audio files, preferred over Spotify. */
     music?: {

@@ -127,7 +127,10 @@ export function CorePanel(): JSX.Element {
             </div>
           )}
 
-          <div className="mode-toggle">
+          <div
+            className="mode-toggle"
+            title="Reasoning tier only — the voice is always the local JARVIS clone (VoiceStudio), $0 in both modes"
+          >
             <button
               type="button"
               className={`opt free${state.mode === "free" ? " active" : ""}`}
@@ -143,6 +146,7 @@ export function CorePanel(): JSX.Element {
               Pro
             </button>
           </div>
+          <div className="mode-note">reasoning tier · voice is always local JARVIS</div>
 
           <div className="core-footer">
             <div className="route-line">

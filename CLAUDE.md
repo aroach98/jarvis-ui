@@ -56,15 +56,20 @@ core panel. Test any stage without a mic:
 `sidecar/.venv/Scripts/python wake_listener.py --send-wav file.wav`.
 
 **Phase 4 + 5 shipped 2026-08-14 — the roadmap is complete.** Pro mode routes
-reasoning to Claude (official SDK, claude-opus-5, refusal fallbacks) and voice to
-ElevenLabs, each failing closed to the free tier (Ollama/SAPI) with the reason on the
-core panel's chips; no personal Anthropic/ElevenLabs/Spotify credentials exist yet, so
-those tiers currently fall back (see `.env.example` + ARCHITECTURE.md §8). "Good
-morning" post-wake triggers the ducked-AC/DC briefing (music skipped until Spotify
-OAuth is set up); "that's enough" stops it. All spoken output uses the JARVIS butler
-persona ("sir", composed diction — vernacular only, deliberately not a voice clone;
-`src/voice/persona.ts`). Generative-UI v1: subagents set
+reasoning to Claude (official SDK, claude-opus-5, refusal fallbacks), failing closed
+to Ollama with the reason on the core panel's chips (see `.env.example` +
+ARCHITECTURE.md §8). "Good morning" post-wake triggers the ducked-AC/DC briefing;
+"that's enough" stops it. All spoken output uses the JARVIS butler persona ("sir",
+composed diction; `src/voice/persona.ts`). Generative-UI v1: subagents set
 `SectionDirectives.attention` and the renderer pulses that section.
+
+**The voice is a local JARVIS clone (2026-10-09, ARCHITECTURE.md §6).** The old
+SAPI-vs-ElevenLabs half of the toggle is gone: `src/voice/voicestudio.ts` speaks every
+line through a VoiceStudio/OmniVoice backend on `127.0.0.1:3900` that jarvis-core
+spawns from `~/VoiceStudio` (`scripts/install-voicestudio.ps1`) and warms on start,
+using the saved profile `JARVIS` built by `scripts/build-jarvis-voice.ps1` from film
+audio (`apps/jarvis-core/voice/README.md` — clips are gitignored). SAPI is only the
+fail-closed fallback while that backend is down; the toggle now governs reasoning only.
 
 **Interactive HUD shipped 2026-08-16 (ARCHITECTURE.md §9)** — the HUD stopped being
 read-only:

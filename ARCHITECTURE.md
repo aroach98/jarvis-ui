@@ -185,12 +185,23 @@ voice ("Jarvis, go premium" / "Jarvis, save mode") or a HUD control.
 |---|---|---|
 | STT | Murmur (local Whisper) | Murmur (local Whisper) — same either way |
 | Reasoning/routing | Local model via Ollama | Claude Agent SDK (Sonnet/Opus) |
-| TTS | Local (Piper or Windows SAPI) | Cloud (e.g. ElevenLabs), higher quality |
-| Marginal cost | $0 | per-request API cost |
+| TTS | Local VoiceStudio JARVIS clone | Local VoiceStudio JARVIS clone — same either way |
+| Marginal cost | $0 | per-request API cost (reasoning only) |
 
 Panel data refresh (polling subagents) is always free-tier local logic regardless of
-mode — only the *voice reasoning and voice quality* are gated by the toggle, since
-those are what actually cost money per interaction.
+mode — only the *voice reasoning* is gated by the toggle, since that is what actually
+costs money per interaction.
+
+**The voice left the toggle on 2026-10-09.** It used to be SAPI (free) vs. ElevenLabs
+(pro). It is now a zero-shot clone of the film JARVIS served locally by
+[VoiceStudio](https://github.com/debpalash/VoiceStudio)'s OmniVoice engine on this
+machine's GPU (`src/voice/voicestudio.ts`), which is $0 in both modes, so there is
+nothing left to toggle. jarvis-core supervises the backend the way it supervises the
+wake sidecar: probe `127.0.0.1:3900`, spawn `uv run uvicorn` from the checkout
+(`scripts/install-voicestudio.ps1`) if nothing answers, attach if something does, warm
+the model once, fail closed to Windows SAPI while it is down. The profile is built from
+film audio by `scripts/build-jarvis-voice.ps1` (see `apps/jarvis-core/voice/README.md`);
+the clips are never committed. ElevenLabs and `ELEVENLABS_*` are gone.
 
 ## 7. Secrets (this repo has none)
 
@@ -231,13 +242,12 @@ data.
 - Wake-word model needs training/tuning for custom phrases (bare "Jarvis",
   "Good morning Jarvis") — today both ride the pretrained "hey jarvis" model,
   with "good morning" detected in the utterance that follows.
-- ~~Voice choice for Pro-mode TTS~~ — defaulted to ElevenLabs' prebuilt
-  "Daniel" (configurable via `ELEVENLABS_VOICE_ID`); do a listen-through when
-  the key is filed.
+- ~~Voice choice for Pro-mode TTS~~ — superseded 2026-10-09: the voice is the
+  local VoiceStudio JARVIS clone in every mode (§6); ElevenLabs removed.
 - ~~Pending personal credentials~~ — all filed and verified live 2026-08-14
-  (`ANTHROPIC_API_KEY`, `ELEVENLABS_API_KEY`, `SPOTIFY_*` in the personal
-  secrets sheet + this machine's `.env.local`): pro-mode Claude reasoning,
-  the ElevenLabs voice, and the ducked-AC/DC briefing all exercised for real.
+  (`ANTHROPIC_API_KEY`, `SPOTIFY_*` in the personal secrets source + this
+  machine's `.env.local`): pro-mode Claude reasoning and the ducked-AC/DC
+  briefing exercised for real (the ElevenLabs key is no longer used).
   A new machine re-copies them from the sheet into `.env.local`.
 - ~~Multi-display config resolution needs real-world testing on the plus-shaped
   4-monitor arrangement~~ — done 2026-08-14: corner-based "topmost" misassigned the

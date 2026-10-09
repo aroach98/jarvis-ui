@@ -43,9 +43,9 @@ fabricated data) — see `CLAUDE.md` for current state:
   to its free counterpart** — nothing spends silently, chips show why. ⚠ No
   personal ANTHROPIC_API_KEY exists yet, so pro reasoning currently falls back
   (verified live: 401 → local answer, turn never dropped).
-- [x] Cloud TTS voice selected: ElevenLabs prebuilt "Daniel" (calm, precise,
-  slightly formal — not a film-voice clone), configurable; ⚠ pending
-  ELEVENLABS_API_KEY, falls back to SAPI until filed.
+- [x] ~~Cloud TTS voice selected: ElevenLabs prebuilt "Daniel"~~ — replaced
+  2026-10-09 by a local VoiceStudio/OmniVoice clone of the film JARVIS used in
+  both modes (ARCHITECTURE.md §6); the voice is no longer part of the toggle.
 - [x] "Good morning" briefing: ducked AC/DC via Spotify Web API (⚠ pending a
   one-time Spotify OAuth setup — skipped gracefully until then), then a 3-line
   flash briefing (CACC / Momentum / Today, ≤15 words each, panel-owner merges

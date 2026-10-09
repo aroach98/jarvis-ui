@@ -17,6 +17,10 @@ jarvis.config.json
 .venv/
 apps/jarvis-core/music/*
 !apps/jarvis-core/music/README.md
+# JARVIS voice reference library (film audio — never committed)
+apps/jarvis-core/voice/*
+!apps/jarvis-core/voice/README.md
+!apps/jarvis-core/voice/sources.txt
 
 # runtime state (mute flag etc.) — machine-local, never committed
 .jarvis-state.json

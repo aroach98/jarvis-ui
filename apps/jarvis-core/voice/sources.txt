@@ -1,0 +1,17 @@
+# YouTube sources for the JARVIS voice build (scripts\build-jarvis-voice.ps1).
+# One video id per line. "anchor" = pure JARVIS audio (no other speakers) that
+# defines the target voice; everything else is speaker-filtered against it.
+9hhIc8iWUx4 anchor   # JARVIS: A Second Screen Experience - All Audio (studio-clean Bettany, 14 min)
+KUxTstoFd1Q anchor   # MCU: All J.A.R.V.I.S. Lines (Reupload), 8 min
+eTZZCvuYxrk          # jarvis all scenes
+Zg_nD_x0bgM          # All Iron Man and Jarvis Scenes
+EfmVRQjoNcY          # Iron Man 2 - Welcome home sir (workshop scene)
+I4iJgghujzU          # Ultron vs J.A.R.V.I.S.
+29Kso1spOyI          # Iron Man but only parts with J.A.R.V.I.S.
+hScHDmIUNIQ          # Jarvis, shut this down
+d5jzaHrIVSk          # Iron Man 3 - Jarvis drop my needle
+rt1dBr2Jz78          # Iron Man 3 - virtual crime scene reconstruction
+zZ0tYNEv0cQ          # JARVIS start up
+RjF_j6QZpxc          # Jarvis Start Up
+1V5AEX1IzUw          # Endgame Jarvis easter egg
+Qv_hQrfTyBA          # Tony Stark's A.I.s - All Abilities (mixed AIs; filtered by speaker)
